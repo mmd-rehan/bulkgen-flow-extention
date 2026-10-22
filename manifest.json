@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "BulkGen for Google Flow",
+  "version": "1.3.0",
+  "description": "Queue many prompts once. Generates videos in Google Flow and downloads each one automatically.",
+  "permissions": ["storage", "downloads", "sidePanel", "tabs", "activeTab", "debugger", "scripting"],
+  "host_permissions": [
+    "https://flow.google.com/*",
+    "https://labs.google/*",
+    "https://storage.googleapis.com/*",
+    "https://*.googleusercontent.com/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "action": { "default_title": "BulkGen for Google Flow" },
+  "content_scripts": [
+    {
+      "matches": ["https://flow.google.com/*", "https://labs.google/fx/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

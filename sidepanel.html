@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BulkGen for Google Flow</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <header>
+    <h1>BulkGen for Flow</h1>
+    <span id="status" class="pill idle">Idle</span>
+  </header>
+
+  <section>
+    <label for="prompts">Prompts <small>(one per line, or separate with a line containing ---)</small></label>
+    <textarea id="prompts" rows="9" placeholder="A fox runs through snowy woods at dawn&#10;The fox finds a glowing lantern&#10;..."></textarea>
+    <div class="row">
+      <button id="clear" class="ghost">Clear</button>
+      <span id="promptCount" class="muted">0 prompts</span>
+    </div>
+  </section>
+
+  <section>
+    <label for="character">Character and world notes <small>(added to every prompt)</small></label>
+    <textarea id="character" rows="4" placeholder="Mira, a 10 year old girl with red braids and a yellow raincoat. Warm cinematic lighting."></textarea>
+    <label for="style">Style <small>(optional)</small></label>
+    <input id="style" type="text" placeholder="cinematic, 35mm film, soft colors">
+  </section>
+
+  <section class="grid">
+    <div>
+      <label for="duration">Seconds</label>
+      <select id="duration"><option>4</option><option selected>6</option><option>8</option><option>10</option></select>
+    </div>
+    <div>
+      <label for="aspect">Aspect</label>
+      <select id="aspect"><option>16:9</option><option>9:16</option></select>
+    </div>
+    <div>
+      <label for="count">Per prompt</label>
+      <select id="count"><option>1</option><option>2</option><option>3</option><option>4</option></select>
+    </div>
+    <div>
+      <label for="model">Model</label>
+      <input id="model" type="text" placeholder="Omni 1.1 Flash">
+    </div>
+    <div>
+      <label for="maxInFlight">At once</label>
+      <input id="maxInFlight" type="number" min="1" max="10" value="2">
+    </div>
+    <div>
+      <label for="maxCredits">Max credits / video</label>
+      <input id="maxCredits" type="number" min="0" value="40">
+    </div>
+    <div>
+      <label for="quality">Download quality</label>
+      <select id="quality"><option value="720p" selected>720p (original)</option><option value="1080p">1080p (upscaled)</option></select>
+    </div>
+    <div>
+      <label for="downloadRetries">Download retries</label>
+      <input id="downloadRetries" type="number" min="1" max="10" value="3">
+    </div>
+    <div>
+      <label for="prefix">File prefix</label>
+      <input id="prefix" type="text" value="flow">
+    </div>
+    <div>
+      <label for="retries">Retries</label>
+      <input id="retries" type="number" min="1" max="6" value="2">
+    </div>
+  </section>
+
+  <section>
+    <label class="check"><input id="confirmNever" type="checkbox"> Turn off Flow's confirm step when applying settings</label>
+    <button id="apply" class="ghost wide">Apply model, aspect and count in Flow</button>
+  </section>
+
+  <section class="actions">
+    <button id="start" class="primary">Start</button>
+    <button id="pause">Pause</button>
+    <button id="resume">Resume</button>
+    <button id="stop" class="danger">Stop</button>
+  </section>
+
+  <section>
+    <div class="bar"><div id="barfill"></div></div>
+    <div id="stats" class="muted">Queued 0 / 0 · Downloaded 0 · Failed 0</div>
+    <div id="log" class="log"></div>
+  </section>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>
