@@ -66,17 +66,22 @@
       <input id="prefix" type="text" value="flow">
     </div>
     <div>
-      <label for="retries">Retries</label>
+      <label for="retries">Send retries</label>
       <input id="retries" type="number" min="1" max="6" value="2">
+    </div>
+    <div>
+      <label for="timeoutMin">Give up after (min)</label>
+      <input id="timeoutMin" type="number" min="3" max="60" value="15">
     </div>
   </section>
 
   <section>
-    <label class="check"><input id="confirmNever" type="checkbox"> Turn off Flow's confirm step when applying settings</label>
+    <label class="check"><input id="confirmNever" type="checkbox"> Turn off Flow's confirm step (set "Confirm before generating" to Never at Start). Faster, but the credit cap can no longer be checked.</label>
     <button id="apply" class="ghost wide">Apply model, aspect and count in Flow</button>
   </section>
 
   <section class="actions">
+    <button id="test" class="wide2">Test with 1 prompt</button>
     <button id="start" class="primary">Start</button>
     <button id="pause">Pause</button>
     <button id="resume">Resume</button>
@@ -86,7 +91,13 @@
   <section>
     <div class="bar"><div id="barfill"></div></div>
     <div id="stats" class="muted">Queued 0 / 0 · Downloaded 0 · Failed 0</div>
+    <div id="step" class="muted"></div>
+    <div id="stuck" class="stuck" hidden></div>
     <div id="log" class="log"></div>
+    <div class="row">
+      <button id="export" class="ghost">Export log</button>
+      <span id="version" class="muted"></span>
+    </div>
   </section>
 
   <script src="sidepanel.js"></script>

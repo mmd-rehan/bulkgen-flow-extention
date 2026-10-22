@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const FIELDS = ['prompts', 'character', 'style', 'duration', 'aspect', 'count', 'model', 'maxInFlight', 'maxCredits', 'prefix', 'retries', 'downloadRetries', 'quality', 'confirmNever'];
+const FIELDS = ['prompts', 'character', 'style', 'duration', 'aspect', 'count', 'model', 'maxInFlight', 'maxCredits', 'prefix', 'retries', 'downloadRetries', 'quality', 'confirmNever', 'timeoutMin'];
 
 function parsePrompts(text) {
   const t = text.replace(/\r/g, '');
@@ -23,6 +23,7 @@ function readForm() {
     retries: Math.max(1, parseInt($('retries').value, 10) || 2),
     quality: $('quality').value,
     downloadRetries: Math.max(1, parseInt($('downloadRetries').value, 10) || 3),
+    timeoutMin: Math.max(3, parseInt($('timeoutMin').value, 10) || 15),
     confirmNever: $('confirmNever').checked
   };
   return cfg;
@@ -39,7 +40,7 @@ async function loadForm() {
   const { bg_cfg } = await chrome.storage.local.get('bg_cfg');
   if (!bg_cfg) return;
   $('prompts').value = bg_cfg.rawPrompts || (bg_cfg.prompts || []).join('\n');
-  for (const f of ['character', 'style', 'duration', 'aspect', 'count', 'model', 'maxInFlight', 'maxCredits', 'prefix', 'retries', 'downloadRetries', 'quality']) {
+  for (const f of ['character', 'style', 'duration', 'aspect', 'count', 'model', 'maxInFlight', 'maxCredits', 'prefix', 'retries', 'downloadRetries', 'quality', 'timeoutMin']) {
     if (bg_cfg[f] !== undefined) $(f).value = bg_cfg[f];
   }
   $('confirmNever').checked = !!bg_cfg.confirmNever;
@@ -119,7 +120,7 @@ async function getFlowProjectTab() {
   return tab;
 }
 
-async function send(type) {
+async function send(type, extra) {
   const redirect = type === 'bg-start' || type === 'bg-apply-settings';
   const tab = redirect ? await getFlowProjectTab() : await flowTab();
   if (!tab) { if (!redirect) alert('Open your Google Flow project tab first (flow.google.com), then try again.'); return null; }
@@ -128,14 +129,17 @@ async function send(type) {
     return null;
   }
   try {
-    return await chrome.tabs.sendMessage(tab.id, { type });
+    return await chrome.tabs.sendMessage(tab.id, Object.assign({ type }, extra));
   } catch (e) {
     alert('Lost contact with the Flow page: ' + e.message);
     return null;
   }
 }
 
+let lastRun = null;
+
 function render(run) {
+  lastRun = run;
   const el = $('status');
   if (!run) { el.textContent = 'Idle'; el.className = 'pill idle'; return; }
   const total = run.prompts ? run.prompts.length : 0;
@@ -143,18 +147,38 @@ function render(run) {
   else if (run.running) { el.textContent = 'Running'; el.className = 'pill run'; }
   else if (run.finished) { el.textContent = 'Finished'; el.className = 'pill idle'; }
   else { el.textContent = 'Stopped'; el.className = 'pill idle'; }
-  $('stats').textContent = `Queued ${run.next || 0} / ${total} · Downloaded ${run.downloaded || 0} · Failed ${run.failed || 0}`;
+  const items = run.items || [];
+  const generating = items.filter((it) => it.status === 'queued').length;
+  const downloading = items.filter((it) => it.status === 'downloading').length;
+  $('stats').textContent = `Queued ${run.next || 0} / ${total} · Generating ${generating} · Downloading ${downloading} · Downloaded ${run.downloaded || 0} · Failed ${run.failed || 0}` + (run.credits ? ` · ${run.credits} credits` : '');
+  $('step').textContent = run.running ? 'Now: ' + (run.step || '') : '';
+  let stuck = run.stuck || '';
+  if (run.running && !run.paused && run.beat && Date.now() - run.beat > 90000) {
+    stuck = 'The Flow tab has not reported anything for ' + Math.round((Date.now() - run.beat) / 60000) + ' min. Make sure the Flow tab is open (not discarded), then click Resume.';
+  }
+  $('stuck').hidden = !stuck;
+  $('stuck').textContent = stuck;
   const pct = total ? Math.round(((run.downloaded || 0) + (run.failed || 0)) / total * 100) : 0;
   $('barfill').style.width = pct + '%';
   const log = $('log');
   log.innerHTML = '';
-  for (const l of (run.log || []).slice(-60)) {
+  for (const l of (run.log || []).slice(-120)) {
     const d = document.createElement('div');
     d.className = l.level;
     d.textContent = new Date(l.t).toLocaleTimeString() + '  ' + l.msg;
     log.appendChild(d);
   }
   log.scrollTop = log.scrollHeight;
+}
+
+function exportLog() {
+  const run = lastRun;
+  if (!run || !run.log) return alert('Nothing to export yet.');
+  const lines = run.log.map((l) => new Date(l.t).toISOString() + '  ' + l.level.toUpperCase().padEnd(5) + '  ' + l.msg);
+  const items = (run.items || []).map((it, i) => `#${i + 1} ${it.status}${it.note ? ' (' + it.note + ')' : ''}${(it.files || []).length ? ' -> ' + it.files.join(', ') : ''}  ${run.prompts[i]}`);
+  const text = 'BulkGen log, version ' + chrome.runtime.getManifest().version + '\n\n' + lines.join('\n') + '\n\nPrompts:\n' + items.join('\n') + '\n';
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  chrome.downloads.download({ url: 'data:text/plain;charset=utf-8,' + encodeURIComponent(text), filename: 'BulkGen/bulkgen-log-' + stamp + '.txt', saveAs: false });
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -171,6 +195,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     const res = await send('bg-start');
     if (res && !res.ok) alert(res.error);
   };
+  $('test').onclick = async () => {
+    const cfg = await saveForm();
+    if (!cfg.prompts.length) return alert('Add at least one prompt.');
+    const res = await send('bg-start', { limit: 1 });
+    if (res && !res.ok) alert(res.error);
+  };
+  $('export').onclick = exportLog;
+  $('version').textContent = 'v' + chrome.runtime.getManifest().version;
+  setInterval(() => render(lastRun), 15000); // keeps the "not reporting" check fresh
   $('pause').onclick = () => send('bg-pause');
   $('resume').onclick = () => send('bg-resume');
   $('stop').onclick = () => send('bg-stop');
