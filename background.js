@@ -68,6 +68,7 @@ chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
     if (i < 0) { suggest(); return; }
     const exp = list.splice(i, 1)[0];
     const map = o.bg_dlmap || {};
+    for (const id of Object.keys(map).slice(0, -200)) delete map[id]; // keep the last 200
     map[item.id] = exp.name;
     const dl = o.bg_dl || {};
     dl[exp.name] = { state: 'in_progress', t: now };
@@ -94,7 +95,9 @@ async function expectDownload(name, title, waitMs) {
   const now = Date.now();
   const list = (o.bg_expect || []).filter((x) => x.until > now && x.name !== name);
   list.push({ name, title, until: now + waitMs });
-  const dl = o.bg_dl || {};
+  // keep two days of results so storage does not grow forever
+  const dl = {};
+  for (const [k, v] of Object.entries(o.bg_dl || {})) if (now - (v.t || 0) < 2 * 86400000) dl[k] = v;
   dl[name] = { state: 'expected', t: now };
   await chrome.storage.local.set({ bg_expect: list, bg_dl: dl });
 }

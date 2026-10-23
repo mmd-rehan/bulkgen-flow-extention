@@ -18,18 +18,42 @@
 
   // ---------- storage ----------
   const mem = {};
+  // After the extension is reloaded or updated, this copy of the script is cut off from it
+  // ("Extension context invalidated"). Then it must stop quietly and leave the page to the new copy.
+  const alive = () => { try { return !!chrome.runtime.id; } catch (e) { return false; } };
+  let retired = false;
+  function retire() {
+    if (retired) return;
+    retired = true;
+    stopFlag = true;
+    clearInterval(rememberTimer);
+    console.log('[BulkGen] Extension was reloaded, this old copy has stopped.');
+  }
+
   const store = {
     async get(k, def) {
       if (DRY) return k in mem ? mem[k] : def;
-      const o = await chrome.storage.local.get(k);
-      return k in o ? o[k] : def;
+      if (!alive()) { retire(); return def; }
+      try {
+        const o = await chrome.storage.local.get(k);
+        return k in o ? o[k] : def;
+      } catch (e) {
+        if (!alive()) retire(); else console.warn('[BulkGen] storage read failed:', e.message);
+        return def;
+      }
     },
     async set(k, val) {
       if (DRY) { mem[k] = val; return; }
-      await chrome.storage.local.set({ [k]: val });
+      if (!alive()) { retire(); return; }
+      try {
+        await chrome.storage.local.set({ [k]: val });
+      } catch (e) {
+        if (!alive()) retire(); else console.warn('[BulkGen] storage write failed:', e.message);
+      }
     }
   };
 
+  let rememberTimer = null;
   let run = null; // live run state
   let stopFlag = false;
   let pauseFlag = false;
@@ -100,6 +124,7 @@
 
   function sendBg(msg) {
     if (!HAS_CHROME) return Promise.resolve({ ok: false, error: 'no extension' });
+    if (!alive()) { retire(); return Promise.resolve({ ok: false, error: 'extension was reloaded' }); }
     return new Promise((resolve) => {
       try {
         chrome.runtime.sendMessage(msg, (x) => {
@@ -1051,7 +1076,7 @@
       if (m) store.set('bg_lastProject', location.origin + m[0]);
     };
     rememberProject();
-    setInterval(rememberProject, 15000);
+    rememberTimer = setInterval(rememberProject, 15000);
     // resume after a page reload
     (async () => {
       const saved = await store.get('bg_run', null);
