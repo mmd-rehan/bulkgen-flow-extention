@@ -689,15 +689,8 @@
   }
 
   // ----- sending in plain mode -----
-  function promptScore(shown, p) {
-    const want = keywords(p);
-    if (!want.length) return 0;
-    const have = new Set(keywords(shown));
-    return want.filter((w) => have.has(w)).length / want.length;
-  }
-
-  function tilesFor(p) {
-    return gridTiles().filter((t) => (t.pending || t.isVideo) && t.prompt && promptScore(t.prompt, p) >= 0.85);
+  function tilesFor(i) {
+    return gridTiles().filter((t) => (t.pending || t.isVideo) && t.prompt && textMatch(t.prompt, i) >= 0.85);
   }
 
   function toastText() {
@@ -718,6 +711,7 @@
     const item = run.items[idx];
     const label = `prompt ${idx + 1}`;
     const p = run.prompts[idx];
+    item.text = buildPlainPrompt(cfg, p);
     await goToGrid();
     if (!(await setAgentMode(false))) throw new Error("could not turn off Flow's Agent mode");
     const box = await waitFor(chatBox, 8000);
@@ -727,7 +721,7 @@
     await sleep(500);
 
     // Retry or page reload: if a new tile for this prompt exists, it was sent already
-    if (typeof item.tilesBefore === 'number' && tilesFor(p).length > item.tilesBefore) {
+    if (typeof item.tilesBefore === 'number' && tilesFor(idx).length > item.tilesBefore) {
       await log(`${label} is already generating in Flow, not sending it again.`);
       return { ok: true, cost: run.costPer || 0, note: 'found in the grid after a retry or reload' };
     }
@@ -744,11 +738,11 @@
     if (refErr) throw new Error('reference image: ' + refErr);
 
     const refs = cfg.useRefs ? await store.get('bg_refs', []) : [];
-    item.tilesBefore = tilesFor(p).length;
+    item.tilesBefore = tilesFor(idx).length;
     item.status = 'sending';
     await saveRun();
     await setStep(`Sending ${label}`);
-    const text = buildPlainPrompt(cfg, p);
+    const text = item.text;
     if (refs.length) await sleep(1200); // Flow redraws the box after adding references
     for (let i = 0; i < 3; i++) {
       setText(chatBox() || box, text);
@@ -764,7 +758,7 @@
     if (refs.length && ingredientCount() !== refs.length) throw new Error(`the prompt box has ${ingredientCount()} reference images instead of ${refs.length}`);
     const t0 = Date.now();
     await trustedClick(btn);
-    const started = () => { toTop(); return tilesFor(p).length > item.tilesBefore; };
+    const started = () => { toTop(); return tilesFor(idx).length > item.tilesBefore; };
     let ok = await waitFor(started, 15000, 500);
     if (!ok && boxText() && sameText(boxText(), text)) {
       await log(`${label}: Start click did not register, clicking again.`, 'warn');
@@ -782,7 +776,7 @@
     if (refs.length) {
       // Flow empties the reference slots after a send; wait for that so the next prompt adds them again
       await waitFor(() => ingredientCount() === 0, 8000, 400);
-      const tile = tilesFor(p)[0];
+      const tile = tilesFor(idx)[0];
       const row = tile && tile.tile.closest('.batch-container');
       if (row && !row.querySelector('img[alt="Ingredient image"]')) await log(`${label}: Flow does not show the reference image on this generation.`, 'warn');
     }
@@ -908,6 +902,7 @@
     if (!box) throw new Error('Prompt box not found. Is the Flow project page open?');
     if (!(await waitIdle())) throw new Error('the Flow agent stayed busy for 90 seconds');
     const text = buildPrompt(cfg, run.prompts[idx]);
+    item.text = text;
 
     // Retry or page reload: if this prompt already reached the chat, never send it again
     let row = null;
@@ -1007,21 +1002,26 @@
       const owner = run.items.findIndex((it) => (it.mediaIds || []).includes(mediaId));
       if (owner >= 0) return waitingFor(run.items[owner], owner) ? owner : -1;
     }
-    const have = new Set(norm(pagePrompt).toLowerCase().match(/[a-z0-9]+/g) || []);
     let best = -1;
     let bestScore = 0;
     run.items.forEach((it, i) => {
       if (!waitingFor(it, i)) return;
       if (!anyText && (it.mediaIds || []).length >= (it.count || 1)) return; // its video has a known id, and this is not it
-      const words = (run.prompts[i].toLowerCase().match(/[a-z0-9]+/g) || []).filter((w) => w.length > 2);
-      if (!words.length) return;
-      const score = words.filter((w) => have.has(w)).length / words.length;
+      const score = textMatch(pagePrompt, i);
       // ties go to the prompt that was queued first
       if (score > bestScore + 0.001 || (Math.abs(score - bestScore) < 0.001 && best >= 0 && (it.queuedAt || 0) < (run.items[best].queuedAt || 0))) {
         best = i; bestScore = score;
       }
     });
-    return bestScore >= 0.6 ? best : -1;
+    return bestScore >= 0.85 ? best : -1;
+  }
+
+  // How well a prompt shown by Flow matches prompt i, checked both ways: all words of our prompt must be
+  // there, and the shown text must not hold words we never sent (prompts that share a subject differ there).
+  function textMatch(shown, i) {
+    const cover = (a, b) => { const A = keywords(a); if (!A.length) return 0; const B = new Set(keywords(b)); return A.filter((w) => B.has(w)).length / A.length; };
+    const sent = (run.items[i] && run.items[i].text) || run.prompts[i];
+    return Math.min(cover(run.prompts[i], shown), cover(shown, sent));
   }
 
   async function openTile(t) {
