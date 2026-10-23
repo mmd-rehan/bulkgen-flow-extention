@@ -642,7 +642,7 @@
     const ok = [...document.querySelectorAll('button')].find((b) => visible(b) && /^add to prompt$/i.test(norm(b.innerText)));
     if (!ok) { escape(); await sleep(400); return false; }
     ok.click();
-    return !!(await waitFor(() => ingredientCount() > before, 6000));
+    return !!(await waitFor(() => ingredientCount() > before, 15000, 400)); // the chip can take a while to appear
   }
 
   async function clearRefs() {
@@ -678,6 +678,12 @@
       if (err) return err;
       run.uploaded[r.name] = true;
       await log(`Reference image ${r.name} uploaded to Flow and added to the prompt box.`);
+    }
+    await sleep(1000);
+    if (ingredientCount() !== refs.length) {
+      const n = ingredientCount();
+      await clearRefs();
+      return `the prompt box had ${n} reference images instead of ${refs.length}`;
     }
     return '';
   }
@@ -755,7 +761,7 @@
       return b && !b.disabled && b.getAttribute('aria-disabled') !== 'true' ? b : null;
     }, 20000); // a fresh upload keeps it disabled for a few seconds
     if (!btn) throw new Error('Start generation button stayed disabled');
-    if (refs.length && ingredientCount() < refs.length) throw new Error('the reference image is not in the prompt box');
+    if (refs.length && ingredientCount() !== refs.length) throw new Error(`the prompt box has ${ingredientCount()} reference images instead of ${refs.length}`);
     const t0 = Date.now();
     await trustedClick(btn);
     const started = () => { toTop(); return tilesFor(p).length > item.tilesBefore; };
