@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "BulkGen for Google Flow",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "description": "Queue many prompts once. Generates videos in Google Flow and downloads each one automatically.",
   "permissions": ["storage", "downloads", "sidePanel", "tabs", "activeTab", "debugger", "scripting", "unlimitedStorage"],
   "host_permissions": [

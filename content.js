@@ -611,22 +611,64 @@
     return ok ? '' : 'the image did not show up in the prompt box';
   }
 
-  async function ensureRefs(cfg) {
-    if (!cfg.useRefs) return '';
-    const refs = await store.get('bg_refs', []);
-    if (!refs.length || ingredientCount() >= refs.length) return '';
-    // a partial set cannot be told apart, so start clean
-    for (let i = 0; i < 6 && ingredientCount(); i++) {
+  // Flow clears the prompt box references after every send. Images uploaded once stay in the
+  // project library under their file name, so later prompts pick them from there (no duplicates).
+  async function attachFromLibrary(name) {
+    const before = ingredientCount();
+    const add = document.querySelector('button[aria-label="Add ingredients to the prompt box"]');
+    if (!add) return false;
+    realClick(add);
+    const findItem = () => [...document.querySelectorAll('button.asset-item')].find((b) => visible(b) && norm(b.innerText).startsWith(name));
+    if (!(await waitFor(() => document.querySelector('button.asset-item'), 4000))) return false;
+    let item = await waitFor(findItem, 1500);
+    if (!item) {
+      const search = [...document.querySelectorAll('input')].find((i) => visible(i) && /search assets/i.test(i.placeholder || ''));
+      if (search) {
+        search.focus();
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(search, name);
+        search.dispatchEvent(new Event('input', { bubbles: true }));
+        item = await waitFor(findItem, 4000);
+      }
+    }
+    if (!item) { escape(); await sleep(400); return false; }
+    realClick(item);
+    await sleep(500);
+    const ok = [...document.querySelectorAll('button')].find((b) => visible(b) && /^add to prompt$/i.test(norm(b.innerText)));
+    if (!ok) { escape(); await sleep(400); return false; }
+    realClick(ok);
+    return !!(await waitFor(() => ingredientCount() > before, 6000));
+  }
+
+  async function clearRefs() {
+    for (let i = 0; i < 8 && ingredientCount(); i++) {
       const x = document.querySelector('button[aria-label="Ingredient"]');
       if (!x) break;
       realClick(x);
       await sleep(400);
     }
+  }
+
+  async function ensureRefs(cfg) {
+    const refs = cfg.useRefs ? await store.get('bg_refs', []) : [];
+    if (!refs.length) {
+      // something left in the prompt box would end up in every video
+      if (ingredientCount()) { await clearRefs(); await log('Removed reference images left in the prompt box (this run does not use any).'); }
+      return '';
+    }
+    if (ingredientCount() >= refs.length) return '';
+    await clearRefs(); // a partial set cannot be told apart, so start clean
+    run.uploaded = run.uploaded || {};
     for (const r of refs) {
-      await setStep(`Uploading reference image ${r.name}`);
+      await setStep(`Adding reference image ${r.name}`);
+      if (await attachFromLibrary(r.name)) {
+        if (!run.uploaded[r.name]) await log(`Reference image ${r.name} taken from the Flow library.`);
+        run.uploaded[r.name] = true;
+        continue;
+      }
       const err = await uploadRef(r, cfg);
       if (err) return err;
-      await log(`Reference image ${r.name} added to the prompt box.`);
+      run.uploaded[r.name] = true;
+      await log(`Reference image ${r.name} uploaded to Flow and added to the prompt box.`);
     }
     return '';
   }
@@ -684,6 +726,7 @@
     }
     if (refErr) throw new Error('reference image: ' + refErr);
 
+    const refs = cfg.useRefs ? await store.get('bg_refs', []) : [];
     item.tilesBefore = tilesFor(p).length;
     item.status = 'sending';
     await saveRun();
@@ -694,8 +737,9 @@
     const btn = await waitFor(() => {
       const b = submitButton();
       return b && !b.disabled && b.getAttribute('aria-disabled') !== 'true' ? b : null;
-    }, 5000);
+    }, 20000); // a fresh upload keeps it disabled for a few seconds
     if (!btn) throw new Error('Start generation button stayed disabled');
+    if (refs.length && ingredientCount() < refs.length) throw new Error('the reference image is not in the prompt box');
     const t0 = Date.now();
     await trustedClick(btn);
     const started = () => { toTop(); return tilesFor(p).length > item.tilesBefore; };
@@ -713,6 +757,13 @@
       return { ok: false, reason: problem ? 'Flow says: ' + short(problem, 160) : 'no generating tile appeared after clicking Start' };
     }
     await log(`Sent ${label} in ${((Date.now() - t0) / 1000).toFixed(1)}s: "${short(p, 70)}"`);
+    if (refs.length) {
+      // Flow empties the reference slots after a send; wait for that so the next prompt adds them again
+      await waitFor(() => ingredientCount() === 0, 8000, 400);
+      const tile = tilesFor(p)[0];
+      const row = tile && tile.tile.closest('.batch-container');
+      if (row && !row.querySelector('img[alt="Ingredient image"]')) await log(`${label}: Flow does not show the reference image on this generation.`, 'warn');
+    }
     return { ok: true, cost: run.costPer || 0 };
   }
 
