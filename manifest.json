@@ -1,18 +1,30 @@
 {
   "manifest_version": 3,
-  "name": "BulkGen for Google Flow",
-  "version": "1.8.4",
-  "description": "Queue many prompts once. Generates videos in Google Flow and downloads each one automatically.",
-  "permissions": ["storage", "downloads", "sidePanel", "tabs", "activeTab", "debugger", "scripting", "unlimitedStorage"],
+  "name": "BulkGen for Flow",
+  "short_name": "BulkGen",
+  "version": "1.9.0",
+  "description": "Queue many video prompts at once in Flow and save every finished video to your Downloads folder automatically.",
+  "homepage_url": "https://github.com/mmd-rehan/bulkgen-flow-extention",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": ["storage", "unlimitedStorage", "downloads", "sidePanel", "scripting", "debugger"],
   "host_permissions": [
     "https://flow.google.com/*",
-    "https://labs.google/*",
-    "https://storage.googleapis.com/*",
-    "https://*.googleusercontent.com/*"
+    "https://labs.google/fx/*"
   ],
   "background": { "service_worker": "background.js" },
   "side_panel": { "default_path": "sidepanel.html" },
-  "action": { "default_title": "BulkGen for Google Flow" },
+  "action": {
+    "default_title": "BulkGen for Flow",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
   "content_scripts": [
     {
       "matches": ["https://flow.google.com/*", "https://labs.google/fx/*"],

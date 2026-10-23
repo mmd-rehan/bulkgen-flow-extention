@@ -129,24 +129,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
-  if (msg.type === 'bulkgen-download') {
-    chrome.downloads.download(
-      { url: msg.url, filename: 'BulkGen/' + msg.filename, conflictAction: 'uniquify', saveAs: false },
-      (id) => {
-        if (chrome.runtime.lastError) { sendResponse({ ok: false, error: chrome.runtime.lastError.message }); return; }
-        chrome.storage.local.get(['bg_dlmap', 'bg_dl']).then((o) => {
-          const map = o.bg_dlmap || {};
-          map[id] = msg.filename;
-          const dl = o.bg_dl || {};
-          dl[msg.filename] = { state: 'in_progress', t: Date.now() };
-          chrome.storage.local.set({ bg_dlmap: map, bg_dl: dl });
-        });
-        sendResponse({ ok: true, id });
-      }
-    );
-    return true;
-  }
-
   // developer builds only (loaded unpacked): lets the test bridge reload the extension
   if (msg.type === 'bulkgen-reload-extension' && !chrome.runtime.getManifest().update_url) {
     sendResponse({ ok: true });
