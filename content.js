@@ -426,7 +426,18 @@
 
   // Watches the chat after our prompt: approves the card (within the cost cap) and waits for Flow to
   // confirm the video was scheduled. Returns { ok, cost } or { ok:false, reason, final, fatal }.
-  async function awaitOutcome(userRow, cfg, label) {
+  // A generating tile in the grid whose prompt matches ours proves Flow started it
+  function pendingTileFor(prompt) {
+    const pw = keywords(prompt);
+    if (!pw.length) return null;
+    return gridTiles().find((t) => {
+      if (!t.pending || !t.subtitle) return false;
+      const have = new Set(keywords(t.subtitle));
+      return pw.filter((w) => have.has(w)).length / pw.length >= 0.8;
+    }) || null;
+  }
+
+  async function awaitOutcome(userRow, cfg, label, prompt) {
     const end = Date.now() + 120000;
     let approvedAt = 0;
     let cost = 0;
@@ -442,7 +453,7 @@
         // the chat shows a thumbnail of each new video; its id is how we recognise the video later.
         // The thumbnail renders a moment after the text.
         const ids = () => { const l = [...scheduled.querySelectorAll('flow-a2ui-video-option img')].map(mediaIdOf).filter(Boolean); return l.length ? l : null; };
-        const mediaIds = (await waitFor(ids, 6000)) || [];
+        const mediaIds = (await waitFor(ids, 1500)) || [];
         return { ok: true, cost, note, mediaIds };
       }
 
@@ -474,15 +485,23 @@
         if (!choice) return { ok: false, reason: 'the approval card closed without an answer' };
         if (!approvedAt) { approvedAt = Date.now(); cost = cardInfo(card).cost; note = 'card was already approved'; }
         await setStep(`Waiting for Flow to confirm ${label} is scheduled`);
+        if (pendingTileFor(prompt)) return { ok: true, cost, note: (note ? note + ', ' : '') + 'confirmed by its tile in the grid' };
+        // e.g. the page reloaded right after Approve: the agent never answered and nothing is generating
+        if (!agentBusy() && Date.now() - approvedAt > 30000) {
+          return { ok: false, resend: true, reason: 'approved, but Flow did not start the video (no reply and no generating tile)' };
+        }
       } else {
         await setStep(`Waiting for the agent to answer ${label}`);
       }
       // The agent replied with something we do not understand (a question, an error) and went quiet
       if (!agentBusy() && agentRows.length && !card) {
         if (!quietSince) quietSince = Date.now();
-        if (Date.now() - quietSince > 12000) {
+        if (Date.now() - quietSince > 20000) {
           const t = rowText(agentRows[agentRows.length - 1]);
-          return { ok: false, reason: 'the agent replied: "' + short(t.replace(/thumb_up.*$/, ''), 160) + '"' };
+          if (pendingTileFor(prompt)) return { ok: true, cost, note: 'confirmed by its tile in the grid' };
+          // Seen on the real site: the agent says "I will generate ..." and then stops without a card.
+          // Nothing was started, so sending the prompt again is safe.
+          return { ok: false, resend: true, reason: 'the agent stopped after replying "' + short(t.replace(/thumb_up.*$/, ''), 120) + '" without starting anything' };
         }
       } else {
         quietSince = 0;
@@ -540,7 +559,7 @@
     }
     item.status = 'sent';
     await saveRun();
-    return awaitOutcome(row, cfg, label);
+    return awaitOutcome(row, cfg, label, run.prompts[idx]);
   }
 
   // ---------- downloading ----------
@@ -882,8 +901,12 @@
             await saveRun();
           } else {
             item.tries = (item.tries || 0) + 1;
-            const maxTries = Math.max(1, parseInt(cfg.retries, 10) || 2);
+            const maxTries = Math.max(1, parseInt(cfg.retries, 10) || 3);
             await log(`Prompt ${idx + 1} try ${item.tries} of ${maxTries} failed: ${res.reason}.`, 'warn');
+            if (res.resend) {
+              delete item.sentBefore; // safe to send it again on the next try
+              await log(`Prompt ${idx + 1} will be sent again on the next try.`);
+            }
             if (res.final || item.tries >= maxTries) {
               item.status = 'skipped';
               item.note = res.reason;

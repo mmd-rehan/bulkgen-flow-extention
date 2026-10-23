@@ -20,7 +20,7 @@ function readForm() {
     maxInFlight: Math.max(1, parseInt($('maxInFlight').value, 10) || 2),
     maxCredits: Math.max(0, parseInt($('maxCredits').value, 10) || 0),
     prefix: ($('prefix').value || 'flow').replace(/[^\w-]+/g, '_'),
-    retries: Math.max(1, parseInt($('retries').value, 10) || 2),
+    retries: Math.max(1, parseInt($('retries').value, 10) || 3),
     quality: $('quality').value,
     downloadRetries: Math.max(1, parseInt($('downloadRetries').value, 10) || 3),
     timeoutMin: Math.max(3, parseInt($('timeoutMin').value, 10) || 15),
