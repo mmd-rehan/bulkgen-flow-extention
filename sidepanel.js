@@ -1,5 +1,9 @@
 const $ = (id) => document.getElementById(id);
-const FIELDS = ['prompts', 'character', 'style', 'duration', 'aspect', 'count', 'model', 'maxInFlight', 'maxCredits', 'prefix', 'retries', 'downloadRetries', 'quality', 'confirmNever', 'timeoutMin'];
+const FIELDS = ['prompts', 'character', 'style', 'duration', 'aspect', 'count', 'model', 'maxInFlight', 'maxCredits', 'prefix', 'retries', 'downloadRetries', 'quality', 'confirmNever', 'timeoutMin', 'engine', 'resolution', 'useRefs', 'refsRights'];
+const VALUE_FIELDS = ['character', 'style', 'aspect', 'count', 'maxInFlight', 'maxCredits', 'prefix', 'retries', 'downloadRetries', 'quality', 'timeoutMin', 'engine'];
+const MAX_REFS = 3;
+let models = []; // what Flow offers, read by the content script
+let savedCfg = {};
 
 function parsePrompts(text) {
   const t = text.replace(/\r/g, '');
@@ -16,7 +20,11 @@ function readForm() {
     duration: $('duration').value,
     aspect: $('aspect').value,
     count: $('count').value,
-    model: $('model').value.trim(),
+    model: $('model').value || savedCfg.model || '',
+    engine: $('engine').value,
+    resolution: $('resolution').value,
+    useRefs: $('useRefs').checked && !$('refsBox').hidden,
+    refsRights: $('refsRights').checked,
     maxInFlight: Math.max(1, parseInt($('maxInFlight').value, 10) || 2),
     maxCredits: Math.max(0, parseInt($('maxCredits').value, 10) || 0),
     prefix: ($('prefix').value || 'flow').replace(/[^\w-]+/g, '_'),
@@ -31,19 +39,150 @@ function readForm() {
 
 async function saveForm() {
   const cfg = readForm();
+  savedCfg = cfg;
   await chrome.storage.local.set({ bg_cfg: cfg });
   $('promptCount').textContent = cfg.prompts.length + ' prompt' + (cfg.prompts.length === 1 ? '' : 's');
   return cfg;
 }
 
 async function loadForm() {
-  const { bg_cfg } = await chrome.storage.local.get('bg_cfg');
-  if (!bg_cfg) return;
-  $('prompts').value = bg_cfg.rawPrompts || (bg_cfg.prompts || []).join('\n');
-  for (const f of ['character', 'style', 'duration', 'aspect', 'count', 'model', 'maxInFlight', 'maxCredits', 'prefix', 'retries', 'downloadRetries', 'quality', 'timeoutMin']) {
-    if (bg_cfg[f] !== undefined) $(f).value = bg_cfg[f];
+  const { bg_cfg, bg_models } = await chrome.storage.local.get(['bg_cfg', 'bg_models']);
+  savedCfg = bg_cfg || {};
+  models = (bg_models && bg_models.models) || [];
+  if (bg_cfg) {
+    $('prompts').value = bg_cfg.rawPrompts || (bg_cfg.prompts || []).join('\n');
+    for (const f of VALUE_FIELDS) if (bg_cfg[f] !== undefined) $(f).value = bg_cfg[f];
+    $('confirmNever').checked = !!bg_cfg.confirmNever;
+    $('useRefs').checked = !!bg_cfg.useRefs;
+    $('refsRights').checked = !!bg_cfg.refsRights;
   }
-  $('confirmNever').checked = !!bg_cfg.confirmNever;
+  renderModels();
+}
+
+// ---- model dropdown (filled from what Flow offers) ----
+function fillSelect(sel, values, want, fallback) {
+  sel.innerHTML = '';
+  for (const v of values) {
+    const o = document.createElement('option');
+    o.value = v;
+    o.textContent = v;
+    sel.appendChild(o);
+  }
+  sel.value = values.includes(want) ? want : (values.includes(fallback) ? fallback : values[0] || '');
+}
+
+function renderModels() {
+  const sel = $('model');
+  const want = savedCfg.model || '';
+  sel.innerHTML = '';
+  if (!models.length) {
+    const o = document.createElement('option');
+    o.value = want;
+    o.textContent = want ? want + ' (click Refresh to check Flow)' : 'Click Refresh to read models from Flow';
+    sel.appendChild(o);
+  }
+  for (const m of models) {
+    const o = document.createElement('option');
+    o.value = m.name;
+    o.textContent = m.name;
+    sel.appendChild(o);
+  }
+  if (models.length) sel.value = models.some((m) => m.name === want) ? want : models[0].name;
+  renderModelOptions();
+}
+
+function renderModelOptions() {
+  const m = models.find((x) => x.name === $('model').value);
+  const durations = m && m.durations.length ? m.durations : (m ? [] : ['4', '6', '8', '10']);
+  if (durations.length) {
+    fillSelect($('duration'), durations, String(savedCfg.duration || ''), '6');
+    $('duration').disabled = false;
+  } else {
+    fillSelect($('duration'), ['fixed'], 'fixed');
+    $('duration').disabled = true;
+  }
+  const res = m && m.resolutions.length ? m.resolutions : [];
+  fillSelect($('resolution'), res.length ? res : ['default'], savedCfg.resolution || '', '720p');
+  $('resolution').disabled = !res.length;
+  if (m && m.aspects && m.aspects.length) fillSelect($('aspect'), m.aspects, savedCfg.aspect || '', '16:9');
+  // reference images only for models that take them (plain mode)
+  const refsOk = $('engine').value !== 'agent' && (!m || m.ingredients);
+  $('refsBox').hidden = !refsOk;
+  $('refsOn').hidden = !$('useRefs').checked;
+  $('agentOpts').hidden = $('engine').value !== 'agent';
+  $('modelInfo').textContent = !m ? '' : (m.durations.length ? `(${m.durations.join('/')}s` : '(fixed length') + (m.credits != null ? `, about ${m.credits} credits each at the settings Flow had when read)` : ')');
+}
+
+async function readModels(quiet) {
+  $('readModels').disabled = true;
+  $('readModels').textContent = 'Reading...';
+  try {
+    const res = await send('bg-read-models', null, quiet);
+    if (res && res.ok) {
+      models = res.models;
+      renderModels();
+      await saveForm();
+    } else if (res && !quiet) {
+      alert(res.error || 'Could not read the models from Flow.');
+    }
+  } finally {
+    $('readModels').disabled = false;
+    $('readModels').textContent = 'Refresh';
+  }
+}
+
+// ---- reference images ----
+function shrinkImage(file, maxSide = 1536) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * k);
+      c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      const png = file.type === 'image/png';
+      resolve({ name: file.name.replace(/\.\w+$/, '') + (png ? '.png' : '.jpg'), dataUrl: c.toDataURL(png ? 'image/png' : 'image/jpeg', 0.92) });
+    };
+    img.onerror = () => reject(new Error('Could not read ' + file.name));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+async function renderRefs() {
+  const { bg_refs } = await chrome.storage.local.get('bg_refs');
+  const list = $('refList');
+  list.innerHTML = '';
+  for (const [i, r] of (bg_refs || []).entries()) {
+    const d = document.createElement('div');
+    d.className = 'ref';
+    d.title = r.name;
+    const img = document.createElement('img');
+    img.src = r.dataUrl;
+    const x = document.createElement('button');
+    x.textContent = 'x';
+    x.title = 'Remove';
+    x.onclick = async () => {
+      const cur = (await chrome.storage.local.get('bg_refs')).bg_refs || [];
+      cur.splice(i, 1);
+      await chrome.storage.local.set({ bg_refs: cur });
+      renderRefs();
+    };
+    d.append(img, x);
+    list.appendChild(d);
+  }
+}
+
+async function addRefs(files) {
+  const cur = (await chrome.storage.local.get('bg_refs')).bg_refs || [];
+  for (const f of files) {
+    if (cur.length >= MAX_REFS) { alert(`Up to ${MAX_REFS} reference images.`); break; }
+    try { cur.push(await shrinkImage(f)); } catch (e) { alert(e.message); }
+  }
+  await chrome.storage.local.set({ bg_refs: cur });
+  $('refFiles').value = '';
+  renderRefs();
 }
 
 const FLOW_URLS = ['https://flow.google.com/*', 'https://labs.google/fx/*'];
@@ -120,18 +259,18 @@ async function getFlowProjectTab() {
   return tab;
 }
 
-async function send(type, extra) {
-  const redirect = type === 'bg-start' || type === 'bg-apply-settings';
+async function send(type, extra, quiet) {
+  const redirect = type === 'bg-start' || type === 'bg-apply-settings' || (type === 'bg-read-models' && !quiet);
   const tab = redirect ? await getFlowProjectTab() : await flowTab();
-  if (!tab) { if (!redirect) alert('Open your Google Flow project tab first (flow.google.com), then try again.'); return null; }
+  if (!tab) { if (!redirect && !quiet) alert('Open your Google Flow project tab first (flow.google.com), then try again.'); return null; }
   if (!(await ensureScript(tab.id))) {
-    alert('Could not reach the Flow page. Refresh the Flow tab once (Cmd+R), then try again.');
+    if (!quiet) alert('Could not reach the Flow page. Refresh the Flow tab once (Cmd+R), then try again.');
     return null;
   }
   try {
     return await chrome.tabs.sendMessage(tab.id, Object.assign({ type }, extra));
   } catch (e) {
-    alert('Lost contact with the Flow page: ' + e.message);
+    if (!quiet) alert('Lost contact with the Flow page: ' + e.message);
     return null;
   }
 }
@@ -187,7 +326,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   const { bg_run } = await chrome.storage.local.get('bg_run');
   render(bg_run);
 
-  for (const f of FIELDS) $(f).addEventListener('input', saveForm);
+  for (const f of FIELDS) $(f).addEventListener(['useRefs', 'refsRights', 'confirmNever'].includes(f) ? 'change' : 'input', saveForm);
+  for (const f of ['model', 'engine', 'useRefs']) $(f).addEventListener('change', async () => { await saveForm(); renderModelOptions(); await saveForm(); });
+  $('readModels').onclick = () => readModels(false);
+  $('refFiles').onchange = () => addRefs([...$('refFiles').files]);
+  renderRefs();
+  // first time: ask Flow which models exist (only if a project tab is open and nothing is running)
+  if (!models.length && !(bg_run && bg_run.running)) readModels(true);
   $('clear').onclick = async () => { $('prompts').value = ''; await saveForm(); };
   $('start').onclick = async () => {
     const cfg = await saveForm();

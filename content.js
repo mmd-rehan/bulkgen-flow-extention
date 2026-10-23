@@ -321,9 +321,15 @@
       const isImage = !!t.querySelector('flow-image-tile');
       const pending = !!pendingEl && !src;
       const failed = !src && !(pctEl && /\d/.test(pctEl.innerText)) && FAIL_RE.test(text.replace(/play_circle/g, ''));
+      // Flow's list view groups each generation in a row that shows the full prompt and a Download button
+      const row = t.closest('.batch-container');
+      const promptEl = row && row.querySelector('flow-expandable-prompt');
+      const prompt = norm((promptEl ? promptEl.innerText : subtitle).replace(/keyboard_return/g, ''));
+      const rowDownload = row && row.querySelectorAll('flow-grid-tile-container').length === 1
+        ? row.querySelector('button[aria-label="Download"]') : null;
       out.push({
-        key: src || ('nosrc:' + key(subtitle || text).slice(0, 80)),
-        el: img || t, tile: t, src, text, subtitle, isVideo, isImage, pending, failed,
+        key: src || ('nosrc:' + key(prompt || text).slice(0, 80)),
+        el: img || t, tile: t, src, text, subtitle, prompt, rowDownload, isVideo, isImage, pending, failed,
         pct: pctEl ? norm(pctEl.innerText) : '',
         title: t.getAttribute('aria-label') || ''
       });
@@ -425,7 +431,292 @@
     return 'Flow settings: ' + (notes.join(', ') || 'nothing changed');
   }
 
-  // ---------- generation ----------
+  // ---------- plain generate mode (Flow's Agent toggle off) ----------
+  // No chat and no approval cards: the settings chip in the prompt box sets model, aspect, length and
+  // count, and Flow shows the credit cost before sending.
+  const agentChip = () => document.querySelector('button.agent-mode-chip');
+  const genTrigger = () => document.querySelector('button[aria-label="Settings trigger"]');
+  const escape = () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+
+  async function setAgentMode(on) {
+    const isOn = () => !!agentChip() && agentChip().getAttribute('aria-pressed') === 'true';
+    if (!agentChip()) return !on; // no toggle at all means the old layout
+    if (isOn() === on) return true;
+    realClick(agentChip());
+    if (await waitFor(() => isOn() === on, 2000)) return true;
+    await trustedClick(agentChip());
+    return !!(await waitFor(() => isOn() === on, 3000));
+  }
+
+  function genPopup() {
+    const leaf = [...document.querySelectorAll('div,span,p')].find((e) => e.children.length <= 2 && /^Generating will use/i.test(norm(e.textContent)) && visible(e));
+    let p = leaf;
+    while (p && !/Ingredients|Frames/.test(p.innerText || '')) p = p.parentElement;
+    return p || null;
+  }
+
+  async function openGenPopup() {
+    if (genPopup()) return genPopup();
+    if (!genTrigger()) return null;
+    realClick(genTrigger());
+    let p = await waitFor(genPopup, 2500);
+    if (!p && genTrigger()) { await trustedClick(genTrigger()); p = await waitFor(genPopup, 3000); }
+    return p;
+  }
+
+  async function closeGenPopup() {
+    if (!genPopup()) return;
+    realClick(genTrigger()); // the chip opens and closes the popup
+    if (!(await waitFor(() => !genPopup(), 1500))) { escape(); await sleep(400); }
+  }
+
+  const popButtons = () => { const p = genPopup(); return p ? [...p.querySelectorAll('button,[role=tab],[role=radio]')].filter(visible) : []; };
+  const hasWord = (el, word) => new RegExp('(^|\\s)' + word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\s|$)', 'i').test(norm(el.innerText));
+  const isOnBtn = (b) => [b.getAttribute('aria-selected'), b.getAttribute('aria-checked'), b.getAttribute('aria-pressed')].includes('true');
+
+  async function popClick(word) {
+    const b = popButtons().find((x) => hasWord(x, word));
+    if (!b) return false;
+    if (!isOnBtn(b)) { realClick(b); await sleep(350); }
+    return true;
+  }
+
+  function popCredits() {
+    const p = genPopup();
+    const m = p && p.innerText.match(/Generating will use\s+([\d,]+)\s+credits?/i);
+    return m ? parseInt(m[1].replace(/,/g, ''), 10) : null;
+  }
+
+  const cleanName = (s) => norm(s).replace(/^volume_up\s*/, '').replace(/\s*arrow_drop_down$/, '');
+  const modelButton = () => popButtons().find((b) => /arrow_drop_down/.test(b.innerText));
+
+  async function openModelMenu() {
+    const b = modelButton();
+    if (!b) return null;
+    realClick(b);
+    return waitFor(() => { const l = [...document.querySelectorAll('[role=menuitem],[role=menuitemradio],[role=option]')].filter(visible); return l.length ? l : null; }, 2500);
+  }
+
+  async function chooseModel(name) {
+    const want = name.toLowerCase();
+    const current = () => (modelButton() ? cleanName(modelButton().innerText).toLowerCase() : '');
+    if (current() === want) return true;
+    const items = await openModelMenu();
+    if (!items) return false;
+    const it = items.find((e) => cleanName(e.innerText).toLowerCase() === want) || items.find((e) => cleanName(e.innerText).toLowerCase().includes(want));
+    if (!it) { escape(); await sleep(300); return false; }
+    realClick(it);
+    await sleep(600);
+    return current().includes(want);
+  }
+
+  // What the popup offers for the model that is selected right now
+  function popOptions() {
+    const labels = popButtons().map((b) => norm(b.innerText));
+    const tokens = (re) => labels.map((l) => (l.match(re) || [])[1]).filter(Boolean);
+    return {
+      durations: tokens(/(?:^|\s)(\d+)s$/),
+      resolutions: tokens(/(?:^|\s)(\d{3,4}p)\b/),
+      aspects: tokens(/(?:^|\s)(\d+:\d+)$/),
+      ingredients: labels.some((l) => /Ingredients$/.test(l)),
+      frames: labels.some((l) => /Frames$/.test(l)),
+      credits: popCredits()
+    };
+  }
+
+  // Reads the video models Flow offers (and what each one supports) for the side panel
+  async function readModels() {
+    await goToGrid();
+    if (!(await setAgentMode(false))) return { ok: false, error: 'Could not switch Flow to plain mode (Agent toggle).' };
+    if (!(await openGenPopup())) return { ok: false, error: 'Could not open the generation settings in the prompt box.' };
+    await popClick('Video');
+    const startName = modelButton() ? cleanName(modelButton().innerText) : '';
+    const items = await openModelMenu();
+    const names = items ? items.map((e) => cleanName(e.innerText)).filter(Boolean) : [];
+    escape();
+    await sleep(400);
+    const models = [];
+    for (const n of names) {
+      if (await chooseModel(n)) models.push(Object.assign({ name: n }, popOptions()));
+    }
+    if (startName) await chooseModel(startName);
+    await closeGenPopup();
+    const info = { models, at: Date.now() };
+    await store.set('bg_models', info);
+    return Object.assign({ ok: true }, info);
+  }
+
+  async function applyPlainSettings(cfg) {
+    await goToGrid();
+    if (!(await setAgentMode(false))) throw new Error("could not turn off Flow's Agent mode");
+    if (!(await openGenPopup())) throw new Error('could not open the generation settings in the prompt box');
+    const notes = [];
+    await popClick('Video');
+    await popClick('Ingredients');
+    if (cfg.model && !(await chooseModel(cfg.model))) notes.push(`model "${cfg.model}" not found`);
+    const o = popOptions();
+    if (cfg.aspect && !(await popClick(cfg.aspect))) notes.push(`aspect ${cfg.aspect} not offered`);
+    if (o.resolutions.length && cfg.resolution && !(await popClick(cfg.resolution))) notes.push(`${cfg.resolution} not offered`);
+    if (o.durations.length) {
+      if (!(await popClick(cfg.duration + 's'))) notes.push(`${cfg.duration}s not offered for this model`);
+    } else {
+      notes.push('this model has a fixed length');
+    }
+    if (cfg.count) await popClick('x' + cfg.count);
+    await sleep(400);
+    const credits = popCredits();
+    const model = modelButton() ? cleanName(modelButton().innerText) : '?';
+    await closeGenPopup();
+    return { model, credits, notes, summary: genTrigger() ? norm(genTrigger().innerText).replace(/crop_\S+\s*/g, '') : '' };
+  }
+
+  // ----- reference images (Flow "Ingredients") -----
+  const ingredientCount = () => document.querySelectorAll('img[alt="Ingredient image"]').length;
+
+  function dataUrlToFile(r) {
+    const [head, b64] = r.dataUrl.split(',');
+    const mime = (head.match(/data:([^;]+)/) || [])[1] || 'image/png';
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new File([bytes], r.name || 'reference.png', { type: mime });
+  }
+
+  // Flow takes files dropped on its "Add reference" zone (scripted file pickers are not possible)
+  async function uploadRef(r, cfg) {
+    const box = chatBox();
+    if (!box) return 'prompt box not found';
+    const before = ingredientCount();
+    const dt = new DataTransfer();
+    dt.items.add(dataUrlToFile(r));
+    const fire = (el, type) => el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }));
+    fire(box, 'dragenter');
+    fire(box, 'dragover');
+    const zone = await waitFor(() => [...document.querySelectorAll('.drop-zone-label')].filter(visible).pop(), 3000);
+    if (!zone) { fire(document.body, 'dragleave'); return 'Flow did not show its drop zone'; }
+    fire(zone, 'dragenter');
+    fire(zone, 'dragover');
+    fire(zone, 'drop');
+    const agree = await waitFor(() => {
+      if (ingredientCount() > before) return 'done';
+      if (!/Rights to use this image/i.test(document.body.innerText)) return null;
+      return [...document.querySelectorAll('button')].find((b) => visible(b) && /^i agree$/i.test(norm(b.innerText))) || null;
+    }, 10000);
+    if (agree && agree !== 'done') {
+      if (!cfg.refsRights) return 'rights';
+      realClick(agree);
+      await log(`Confirmed Flow's "Rights to use this image" for ${r.name} (you ticked the rights box in the panel).`);
+    }
+    const ok = await waitFor(() => ingredientCount() > before, 60000, 500);
+    return ok ? '' : 'the image did not show up in the prompt box';
+  }
+
+  async function ensureRefs(cfg) {
+    if (!cfg.useRefs) return '';
+    const refs = await store.get('bg_refs', []);
+    if (!refs.length || ingredientCount() >= refs.length) return '';
+    // a partial set cannot be told apart, so start clean
+    for (let i = 0; i < 6 && ingredientCount(); i++) {
+      const x = document.querySelector('button[aria-label="Ingredient"]');
+      if (!x) break;
+      realClick(x);
+      await sleep(400);
+    }
+    for (const r of refs) {
+      await setStep(`Uploading reference image ${r.name}`);
+      const err = await uploadRef(r, cfg);
+      if (err) return err;
+      await log(`Reference image ${r.name} added to the prompt box.`);
+    }
+    return '';
+  }
+
+  // ----- sending in plain mode -----
+  function promptScore(shown, p) {
+    const want = keywords(p);
+    if (!want.length) return 0;
+    const have = new Set(keywords(shown));
+    return want.filter((w) => have.has(w)).length / want.length;
+  }
+
+  function tilesFor(p) {
+    return gridTiles().filter((t) => (t.pending || t.isVideo) && t.prompt && promptScore(t.prompt, p) >= 0.85);
+  }
+
+  function toastText() {
+    const els = document.querySelectorAll('[role=alert],[role=status],mat-snack-bar-container,.mat-mdc-snack-bar-label,[class*=snackbar],[class*=toast]');
+    return [...els].map((e) => norm(e.innerText)).filter((t) => t && t.length < 300).join(' | ');
+  }
+
+  function buildPlainPrompt(cfg, p) {
+    const dot = (s) => { s = s.trim(); return /[.!?]$/.test(s) ? s : s + '.'; };
+    const parts = [];
+    if (cfg.character && cfg.character.trim()) parts.push(dot(cfg.character));
+    parts.push(dot(p));
+    if (cfg.style && cfg.style.trim()) parts.push('Style: ' + dot(cfg.style));
+    return parts.join(' ');
+  }
+
+  async function submitPlain(cfg, idx) {
+    const item = run.items[idx];
+    const label = `prompt ${idx + 1}`;
+    const p = run.prompts[idx];
+    await goToGrid();
+    if (!(await setAgentMode(false))) throw new Error("could not turn off Flow's Agent mode");
+    const box = await waitFor(chatBox, 8000);
+    if (!box) throw new Error('Prompt box not found. Is the Flow project page open?');
+    const toTop = () => { const sc = gridScroller(); if (sc) sc.scrollTop = 0; };
+    toTop();
+    await sleep(500);
+
+    // Retry or page reload: if a new tile for this prompt exists, it was sent already
+    if (typeof item.tilesBefore === 'number' && tilesFor(p).length > item.tilesBefore) {
+      await log(`${label} is already generating in Flow, not sending it again.`);
+      return { ok: true, cost: run.costPer || 0, note: 'found in the grid after a retry or reload' };
+    }
+    if (genTrigger() && !/video/i.test(genTrigger().innerText)) {
+      const s2 = await applyPlainSettings(cfg);
+      await log(`Flow settings were reset, applied them again: ${s2.summary}.`, 'warn');
+    }
+    const refErr = await ensureRefs(cfg);
+    if (refErr === 'rights') {
+      return { ok: false, fatal: true, reason: 'Flow asks you to confirm you have the rights to the reference image. Click "I agree" in Flow, or tick the rights box in the panel' };
+    }
+    if (refErr) throw new Error('reference image: ' + refErr);
+
+    item.tilesBefore = tilesFor(p).length;
+    item.status = 'sending';
+    await saveRun();
+    await setStep(`Sending ${label}`);
+    const text = buildPlainPrompt(cfg, p);
+    setText(box, text);
+    await sleep(400);
+    const btn = await waitFor(() => {
+      const b = submitButton();
+      return b && !b.disabled && b.getAttribute('aria-disabled') !== 'true' ? b : null;
+    }, 5000);
+    if (!btn) throw new Error('Start generation button stayed disabled');
+    const t0 = Date.now();
+    await trustedClick(btn);
+    const started = () => { toTop(); return tilesFor(p).length > item.tilesBefore; };
+    let ok = await waitFor(started, 15000, 500);
+    if (!ok && boxText() && sameText(boxText(), text)) {
+      await log(`${label}: Start click did not register, clicking again.`, 'warn');
+      const b = submitButton();
+      if (b && !b.disabled) await trustedClick(b);
+      ok = await waitFor(started, 15000, 500);
+    }
+    if (!ok && !boxText()) ok = await waitFor(started, 30000, 1000); // Flow took it, the tile is slow
+    if (!ok) {
+      const problem = pageProblem() || toastText();
+      if (problem && CREDIT_RE.test(problem)) return { ok: false, fatal: true, reason: 'Flow says: ' + short(problem, 200) };
+      return { ok: false, reason: problem ? 'Flow says: ' + short(problem, 160) : 'no generating tile appeared after clicking Start' };
+    }
+    await log(`Sent ${label} in ${((Date.now() - t0) / 1000).toFixed(1)}s: "${short(p, 70)}"`);
+    return { ok: true, cost: run.costPer || 0 };
+  }
+
+  // ---------- generation (Flow agent chat) ----------
   function buildPrompt(cfg, p) {
     const parts = [];
     const dot = (s) => { s = s.trim(); return /[.!?]$/.test(s) ? s : s + '.'; };
@@ -741,6 +1032,40 @@
     }
   }
 
+  // 720p straight from the grid row's Download button, no need to open the video
+  async function downloadFromRow(cfg, t, idx) {
+    run.seen.push(t.key);
+    const item = run.items[idx];
+    const id = 'row:' + t.key;
+    if (item.status === 'failed' || item.status === 'skipped') {
+      run.failed = Math.max(0, run.failed - 1);
+      item.lateOk = false;
+      await log(`Prompt ${idx + 1} arrived late after being marked ${item.status}, downloading it anyway.`, 'warn');
+    }
+    const title = t.title || run.prompts[idx];
+    const name = `${cfg.prefix || 'flow'}_${String(idx + 1).padStart(3, '0')}_${slug(title)}.mp4`;
+    await setStep(`Downloading video for prompt ${idx + 1}`);
+    await sendBg({ type: 'bulkgen-expect-download', filename: name, title, waitMs: 4 * 60000 });
+    await trustedClick(t.rowDownload);
+    let started = false;
+    const end = Date.now() + 20000;
+    while (Date.now() < end && !stopFlag) {
+      const s = await dlState(name);
+      if (s && (s.state === 'in_progress' || s.state === 'complete')) { started = true; break; }
+      await sleep(500);
+    }
+    if (started) {
+      run.doneEdits.push(id);
+      run.downloads[name] = { idx, editId: id, tileKey: t.key, title, startedAt: Date.now(), quality: '720p' };
+      item.status = 'downloading';
+      progress();
+      await log(`Prompt ${idx + 1} finished${item.queuedAt ? ' after ' + Math.round((Date.now() - item.queuedAt) / 60000 * 10) / 10 + ' min' : ''}. Download started: ${name}`);
+    } else {
+      run.dlTries[id] = (run.dlTries[id] || 0) + 1;
+      await failDownloadTry(cfg, idx, id, t.key, title, 'the Download button did not start a download');
+    }
+  }
+
   async function failDownloadTry(cfg, idx, editId, tileKey, title, why) {
     const maxTries = Math.max(1, parseInt(cfg.downloadRetries, 10) || 3);
     const tries = run.dlTries[editId] || 1;
@@ -827,6 +1152,12 @@
             }
             continue;
           }
+          if (t.isVideo && t.src && t.prompt) {
+            // list view shows the prompt, so we know right away whether the video is ours
+            if (matchItem(t.prompt, '') >= 0) { target = t; break; }
+            run.seen.push(t.key);
+            continue;
+          }
           if (t.isVideo && t.src) {
             if (fullScan || titleLooksOurs(t.title)) { target = t; break; }
             // older video that has nothing to do with this run
@@ -856,7 +1187,9 @@
         continue;
       }
       if (!target) break;
-      await processTile(cfg, target);
+      const rowIdx = target.prompt ? matchItem(target.prompt, '') : -1;
+      if (rowIdx >= 0 && target.rowDownload && cfg.quality !== '1080p' && (run.items[rowIdx].count || 1) === 1) await downloadFromRow(cfg, target, rowIdx);
+      else await processTile(cfg, target);
       did++;
       await saveRun();
       await goToGrid();
@@ -904,7 +1237,7 @@
           const item = run.items[idx];
           let res;
           try {
-            res = await submitOne(cfg, idx);
+            res = cfg.engine === 'agent' ? await submitOne(cfg, idx) : await submitPlain(cfg, idx);
           } catch (e) {
             res = { ok: false, reason: e.message };
           }
@@ -1003,7 +1336,7 @@
     if (!/^\/project\//.test(location.pathname)) return { ok: false, error: 'Open a Flow project page first.' };
     stopFlag = false; pauseFlag = false;
     run = { running: true, log: [], items: [], prompts: [], startedAt: Date.now(), step: 'Starting' };
-    await log(`Starting ${prompts.length} prompt${prompts.length > 1 ? 's' : ''}, ${cfg.maxInFlight || 2} at once, ${cfg.duration}s, download ${cfg.quality || '720p'}, cap ${cfg.maxCredits || 'none'} credits per video.`);
+    await log(`Starting ${prompts.length} prompt${prompts.length > 1 ? 's' : ''} (${cfg.engine === 'agent' ? 'Flow agent' : 'plain mode'}), ${cfg.maxInFlight || 2} at once, ${cfg.model || 'current model'}, ${cfg.duration}s, download ${cfg.quality || '720p'}, cap ${cfg.maxCredits || 'none'} credits per video${cfg.useRefs ? ', with reference images' : ''}.`);
     await goToGrid();
     // wait until the grid has finished drawing so existing media is not mistaken for new output
     let existing = [];
@@ -1023,7 +1356,27 @@
       lastProgress: Date.now(), stuck: '', generating: 0
     });
     await saveRun();
-    if (cfg.confirmNever) await log(await applyFlowSettings({ confirmNever: true }));
+    if (cfg.engine === 'agent') {
+      if (await setAgentMode(true) === false) await log('Could not turn on Flow\'s Agent mode.', 'warn');
+      if (cfg.confirmNever) await log(await applyFlowSettings({ confirmNever: true }));
+    } else {
+      let s1;
+      try { s1 = await applyPlainSettings(cfg); } catch (e) {
+        run.running = false; run.stuck = 'Could not set up Flow: ' + e.message; await saveRun();
+        return { ok: false, error: 'Could not set up Flow: ' + e.message };
+      }
+      run.costPer = s1.credits || 0;
+      const perVideo = s1.credits ? Math.round(s1.credits / count) : 0;
+      await log(`Flow set to ${s1.model}: ${s1.summary}. Flow estimates ${s1.credits == null ? 'unknown' : s1.credits} credits per prompt.${s1.notes.length ? ' Note: ' + s1.notes.join(', ') + '.' : ''}`);
+      const cap = parseInt(cfg.maxCredits, 10) || 0;
+      if (cap && perVideo > cap) {
+        run.running = false; run.step = 'Stopped';
+        run.stuck = `Flow estimates ${perVideo} credits per video, above your cap of ${cap}. Nothing was sent. Raise the cap or pick a cheaper model.`;
+        await log(run.stuck, 'error');
+        await saveRun();
+        return { ok: false, error: run.stuck };
+      }
+    }
     mainLoop();
     return { ok: true };
   }
@@ -1033,6 +1386,9 @@
     switch (msg && msg.type) {
       case 'bg-ping': return { ok: true, url: location.href, hasChat: !!chatBox(), looping };
       case 'bg-start': return startRun(msg.limit);
+      case 'bg-read-models':
+        if (looping) return { ok: false, error: 'A run is going. Read the models when it is finished.' };
+        return readModels();
       case 'bg-pause':
         pauseFlag = true;
         if (run) { run.paused = true; await saveRun(); }
@@ -1098,6 +1454,7 @@
         let res;
         try {
           if (d.type === 'bg-set-cfg') { await store.set('bg_cfg', Object.assign(await store.get('bg_cfg', {}), d.cfg)); res = { ok: true }; }
+          else if (d.type === 'bg-set-refs') { await store.set('bg_refs', d.refs || []); res = { ok: true }; }
           else if (d.type === 'bg-status') res = { ok: true, run: await store.get('bg_run', null), looping, version: chrome.runtime.getManifest().version };
           else if (d.type === 'bg-reload-extension') res = await sendBg({ type: 'bulkgen-reload-extension' });
           else res = await onMessage(d);

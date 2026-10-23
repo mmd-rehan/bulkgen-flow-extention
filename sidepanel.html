@@ -28,10 +28,31 @@
     <input id="style" type="text" placeholder="cinematic, 35mm film, soft colors">
   </section>
 
+  <section>
+    <label for="model">Model <small id="modelInfo"></small></label>
+    <div class="row gap">
+      <select id="model"><option value="">Read models from Flow first</option></select>
+      <button id="readModels" class="ghost" title="Ask Flow which video models are available">Refresh</button>
+    </div>
+  </section>
+
+  <section id="refsBox" hidden>
+    <label class="check"><input id="useRefs" type="checkbox"> Use reference images <small>(Flow "Ingredients": same characters, objects or style in every video)</small></label>
+    <div id="refsOn" hidden>
+      <input id="refFiles" type="file" accept="image/png,image/jpeg,image/webp" multiple>
+      <div id="refList" class="refs"></div>
+      <label class="check"><input id="refsRights" type="checkbox"> I own the rights to these images. Let BulkGen click "I agree" on Flow's "Rights to use this image" dialog.</label>
+    </div>
+  </section>
+
   <section class="grid">
     <div>
       <label for="duration">Seconds</label>
       <select id="duration"><option>4</option><option selected>6</option><option>8</option><option>10</option></select>
+    </div>
+    <div>
+      <label for="resolution">Resolution</label>
+      <select id="resolution"><option>720p</option></select>
     </div>
     <div>
       <label for="aspect">Aspect</label>
@@ -40,10 +61,6 @@
     <div>
       <label for="count">Per prompt</label>
       <select id="count"><option>1</option><option>2</option><option>3</option><option>4</option></select>
-    </div>
-    <div>
-      <label for="model">Model</label>
-      <input id="model" type="text" placeholder="Omni 1.1 Flash">
     </div>
     <div>
       <label for="maxInFlight">At once</label>
@@ -76,8 +93,15 @@
   </section>
 
   <section>
-    <label class="check"><input id="confirmNever" type="checkbox"> Turn off Flow's confirm step (set "Confirm before generating" to Never at Start). Faster, but the credit cap can no longer be checked.</label>
-    <button id="apply" class="ghost wide">Apply model, aspect and count in Flow</button>
+    <label for="engine">How to drive Flow</label>
+    <select id="engine">
+      <option value="plain">Plain generate box (recommended)</option>
+      <option value="agent">Flow agent chat (older way)</option>
+    </select>
+    <div id="agentOpts" hidden>
+      <label class="check"><input id="confirmNever" type="checkbox"> Turn off Flow's confirm step (set "Confirm before generating" to Never at Start). Faster, but the credit cap can no longer be checked.</label>
+      <button id="apply" class="ghost wide">Apply model, aspect and count in Flow</button>
+    </div>
   </section>
 
   <section class="actions">
