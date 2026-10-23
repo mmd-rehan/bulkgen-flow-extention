@@ -118,7 +118,10 @@
       const r = el.getBoundingClientRect();
       const res = await sendBg({ type: 'bulkgen-click', x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) });
       if (res.ok) return true;
-      await log('Trusted click failed (' + res.error + '). Close DevTools on the Flow tab if it is open.', 'warn');
+      const hint = /different extension/i.test(res.error)
+        ? 'Another extension is attached to this tab (for example a browser automation tool), close it.'
+        : 'Close DevTools on the Flow tab if it is open.';
+      await log('Real click failed (' + res.error + '), using a scripted click. ' + hint, 'warn');
     }
     realClick(el);
     return false;
@@ -309,10 +312,21 @@
 
   async function goToGrid() {
     if (/\/edit\//.test(location.pathname)) {
-      const back = document.querySelector('button[aria-label^="Back button"]') || findClickable(/^back button/i);
-      if (back) realClick(back);
-      if (!(await waitFor(() => !/\/edit\//.test(location.pathname), 8000))) history.back();
-      await waitFor(() => !/\/edit\//.test(location.pathname), 5000);
+      const left = () => !/\/edit\//.test(location.pathname);
+      const backBtn = () => document.querySelector('button[aria-label^="Back button"]') || findClickable(/^back button/i);
+      // an open menu or tooltip can swallow the click, so close it first
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+      await sleep(200);
+      if (backBtn()) realClick(backBtn());
+      if (!(await waitFor(left, 5000)) && backBtn()) {
+        await log('Back button did not react, trying a real click.', 'warn');
+        await trustedClick(backBtn());
+      }
+      if (!(await waitFor(left, 5000)) && run && run.project) {
+        await log('Still on the video page, loading the project page again.', 'warn');
+        location.assign(location.origin + run.project);
+        await sleep(20000);
+      }
       await sleep(800);
     }
     // "All media" always exists; the Videos tab only appears after the first video
@@ -417,7 +431,11 @@
       const agentRows = rows.filter((r) => !isUserRow(r));
       const card = rows.map((r) => r.querySelector('flow-permission-message')).filter(Boolean).pop();
       const scheduled = agentRows.find((r) => !r.querySelector('flow-permission-message') && (r.querySelector('flow-a2ui-video-option') || SCHEDULED_RE.test(rowText(r))));
-      if (scheduled) return { ok: true, cost, note };
+      if (scheduled) {
+        // the chat shows a thumbnail of each new video; its id is how we recognise the video later
+        const mediaIds = [...scheduled.querySelectorAll('flow-a2ui-video-option img')].map(mediaIdOf).filter(Boolean);
+        return { ok: true, cost, note, mediaIds };
+      }
 
       const problem = agentRows.map(rowText).find((t) => CREDIT_RE.test(t)) || pageProblem();
       if (problem) return { ok: false, fatal: true, reason: 'Flow says: ' + short(problem, 200) };
@@ -535,15 +553,49 @@
     return t && t.value ? t.value : '';
   }
 
-  // Which of our queued prompts does this video belong to? Flow shows the prompt (without our
-  // "Generate a video." and duration parts) on the edit page.
-  function matchItem(pagePrompt) {
+  // Stable media id from Flow image URLs like .../image/<uuid>
+  function mediaIdOf(img) {
+    const m = ((img && (img.getAttribute('src') || img.src)) || '').match(/\/image\/([0-9a-f]{8}-[0-9a-f-]{27})/i);
+    return m ? m[1].toLowerCase() : '';
+  }
+
+  // The edit page has a strip of thumbnails; the active one is the video on screen
+  function currentMediaId() {
+    const b = document.querySelector('.thumbnail-button[aria-current="true"],.thumbnail-button.active');
+    return b ? mediaIdOf(b.querySelector('img')) : '';
+  }
+
+  function waitingFor(it, i) {
+    if (!['queued', 'sent', 'downloading'].includes(it.status) && !(['failed', 'skipped'].includes(it.status) && it.lateOk)) return false;
+    return (it.files || []).length + Object.values(run.downloads || {}).filter((d) => d.idx === i).length < (it.count || 1);
+  }
+
+  const keywords = (s) => (s.toLowerCase().match(/[a-z0-9]+/g) || []).filter((w) => w.length > 2 && !/^(the|and|with|for|from|into|over|under|its|this|that|style|video|generate|make|second|clip|cinematic|realistic)$/.test(w));
+
+  // Cheap check before opening a tile: Flow titles are short summaries of the prompt
+  function titleLooksOurs(title) {
+    const tw = keywords(title);
+    if (!tw.length) return true;
+    return run.items.some((it, i) => {
+      if (!waitingFor(it, i)) return false;
+      const pw = new Set(keywords(run.prompts[i]));
+      return tw.filter((w) => pw.has(w)).length / tw.length >= 0.5;
+    });
+  }
+
+  // Which of our queued prompts does this video belong to? First by the media id we saw in the chat,
+  // then (only for prompts whose id we never saw) by the prompt text Flow shows on the edit page.
+  function matchItem(pagePrompt, mediaId, anyText) {
+    if (mediaId) {
+      const owner = run.items.findIndex((it) => (it.mediaIds || []).includes(mediaId));
+      if (owner >= 0) return waitingFor(run.items[owner], owner) ? owner : -1;
+    }
     const have = new Set(norm(pagePrompt).toLowerCase().match(/[a-z0-9]+/g) || []);
     let best = -1;
     let bestScore = 0;
     run.items.forEach((it, i) => {
-      if (!['queued', 'sent', 'downloading'].includes(it.status) && !(['failed', 'skipped'].includes(it.status) && it.lateOk)) return;
-      if ((it.files || []).length + Object.values(run.downloads || {}).filter((d) => d.idx === i).length >= (it.count || 1)) return;
+      if (!waitingFor(it, i)) return;
+      if (!anyText && (it.mediaIds || []).length >= (it.count || 1)) return; // its video has a known id, and this is not it
       const words = (run.prompts[i].toLowerCase().match(/[a-z0-9]+/g) || []).filter((w) => w.length > 2);
       if (!words.length) return;
       const score = words.filter((w) => have.has(w)).length / words.length;
@@ -567,15 +619,16 @@
     const btn = document.querySelector('button[aria-label="Download media"]') || findClickable(/^download media$/i);
     if (!btn) return '';
     const menu = () => { const l = [...document.querySelectorAll('[role=menuitem]')].filter(visible); return l.length ? l : null; };
-    realClick(btn);
-    let items = await waitFor(menu, 2500);
-    if (!items) { await trustedClick(btn); items = await waitFor(menu, 4000); }
+    // Real clicks here: Chrome holds back repeated downloads that do not come from a user gesture
+    await trustedClick(btn);
+    let items = await waitFor(menu, 3000);
+    if (!items) { realClick(btn); items = await waitFor(menu, 3000); }
     if (!items) return '';
     const want = quality === '1080p' ? /1080/ : /720|original/i;
     const choice = items.find((e) => want.test(accName(e))) || items.find((e) => /720|original/i.test(accName(e)));
     if (!choice) return '';
     await sendBg({ type: 'bulkgen-expect-download', filename: name, title, waitMs: quality === '1080p' ? 25 * 60000 : 4 * 60000 });
-    realClick(choice);
+    await trustedClick(choice);
     const end = Date.now() + 25000;
     while (Date.now() < end && !stopFlag) {
       const s = await dlState(name);
@@ -599,7 +652,8 @@
     if (!isVideoPage) { await log(`"${short(t.title, 40)}" is not a video, skipped.`); return; }
     if (run.doneEdits.includes(editId)) return; // same video under a new thumbnail URL
     const pagePrompt = await waitFor(promptOnPage, 4000) || '';
-    const idx = matchItem(pagePrompt);
+    const mediaId = await waitFor(currentMediaId, 3000) || '';
+    const idx = matchItem(pagePrompt, mediaId);
     if (idx < 0) {
       run.doneEdits.push(editId);
       await log(`Skipped "${short(t.title, 40)}": it does not match any waiting prompt of this run.`);
@@ -627,6 +681,10 @@
     } else {
       run.dlTries[editId] = prev + 1;
       await failDownloadTry(cfg, idx, editId, t.key, title, 'the Download media menu did not start a download');
+      if (!run.blockHint) {
+        run.blockHint = true;
+        await log('If no file appears at all: Chrome may be blocking repeated downloads from flow.google.com. Click the download icon with a red mark in the address bar and choose Allow (or allow flow.google.com in chrome://settings/content/automaticDownloads).', 'warn');
+      }
     }
   }
 
@@ -682,6 +740,7 @@
     await goToGrid();
     await sleep(800);
     let did = 0;
+    let fullScan = false;
     for (let pass = 0; pass < 40 && !stopFlag && !pauseFlag; pass++) {
       const scroller = gridScroller();
       if (scroller) scroller.scrollTop = 0;
@@ -697,7 +756,7 @@
           if (t.isImage) { run.seen.push(t.key); continue; }
           if (t.failed) {
             run.seen.push(t.key);
-            const idx = matchItem(t.subtitle || t.text);
+            const idx = matchItem(t.subtitle || t.text, '', true);
             if (idx >= 0) {
               const it = run.items[idx];
               it.status = 'failed';
@@ -708,7 +767,13 @@
             }
             continue;
           }
-          if (t.isVideo && t.src) { target = t; break; }
+          if (t.isVideo && t.src) {
+            if (fullScan || titleLooksOurs(t.title)) { target = t; break; }
+            // older video that has nothing to do with this run
+            run.seen.push(t.key);
+            run.skippedByTitle = (run.skippedByTitle || []).concat(t.key).slice(-500);
+            continue;
+          }
           unknown++;
         }
         if (target || !scroller) break;
@@ -719,6 +784,17 @@
         if (scroller.scrollTop === before) break; // reached the bottom
       }
       run.generating = generating;
+      if (!target && !fullScan && generating === 0 && inFlight() > 0 && Date.now() - (run.fullScanAt || 0) > 120000) {
+        // Flow shows nothing generating but we still wait for videos: maybe a title did not resemble
+        // its prompt. Look at every unknown tile once.
+        run.fullScanAt = Date.now();
+        const skipped = new Set(run.skippedByTitle || []);
+        run.seen = run.seen.filter((k) => !skipped.has(k));
+        run.skippedByTitle = [];
+        fullScan = true;
+        await log('Nothing is generating but some videos are still missing, checking every new tile.');
+        continue;
+      }
       if (!target) break;
       await processTile(cfg, target);
       did++;
@@ -751,7 +827,7 @@
         if (!navigator.onLine) { await setStep('Waiting for the network to come back'); await sleep(3000); continue; }
         // stay on the project the run started in
         if (run.project && !location.pathname.startsWith(run.project)) {
-          await log('Flow moved to another page, going back to the project.', 'warn');
+          await log(`Flow moved to another page (${location.pathname.replace(/[0-9a-f-]{36}/gi, 'ID')}), going back to the project.`, 'warn');
           location.assign(location.origin + run.project);
           await sleep(20000);
           continue;
@@ -777,6 +853,7 @@
             item.status = 'queued';
             item.queuedAt = Date.now();
             item.cost = res.cost || 0;
+            item.mediaIds = res.mediaIds || [];
             run.next += 1;
             run.credits = (run.credits || 0) + (res.cost || 0);
             progress();
@@ -943,7 +1020,8 @@
         run = saved;
         pauseFlag = !!saved.paused;
         await sleep(4000);
-        await log(pauseFlag ? 'Page reloaded. The run is paused, click Resume to continue.' : 'Page reloaded, resuming the queue.');
+        const where = location.pathname.replace(/[0-9a-f-]{36}/gi, 'ID');
+        await log(pauseFlag ? `Page reloaded (${where}). The run is paused, click Resume to continue.` : `Page reloaded (${where}), resuming the queue.`);
         mainLoop();
       }
     })();
