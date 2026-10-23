@@ -202,6 +202,13 @@
     return messageRows().filter((r) => isUserRow(r) && sameText(rowText(r), text));
   }
 
+  // Media ids of the videos the chat scheduled for a prompt (last time it was sent)
+  function chatMediaIds(text) {
+    const row = userRowsMatching(text).pop();
+    if (!row) return [];
+    return rowsAfter(row).flatMap((r) => [...r.querySelectorAll('flow-a2ui-video-option img')].map(mediaIdOf)).filter(Boolean);
+  }
+
   // Rows the agent (and our Approve/Reject answers) added after a given user message
   function rowsAfter(userRow) {
     const out = [];
@@ -432,8 +439,10 @@
       const card = rows.map((r) => r.querySelector('flow-permission-message')).filter(Boolean).pop();
       const scheduled = agentRows.find((r) => !r.querySelector('flow-permission-message') && (r.querySelector('flow-a2ui-video-option') || SCHEDULED_RE.test(rowText(r))));
       if (scheduled) {
-        // the chat shows a thumbnail of each new video; its id is how we recognise the video later
-        const mediaIds = [...scheduled.querySelectorAll('flow-a2ui-video-option img')].map(mediaIdOf).filter(Boolean);
+        // the chat shows a thumbnail of each new video; its id is how we recognise the video later.
+        // The thumbnail renders a moment after the text.
+        const ids = () => { const l = [...scheduled.querySelectorAll('flow-a2ui-video-option img')].map(mediaIdOf).filter(Boolean); return l.length ? l : null; };
+        const mediaIds = (await waitFor(ids, 6000)) || [];
         return { ok: true, cost, note, mediaIds };
       }
 
@@ -739,6 +748,13 @@
   async function harvest(cfg) {
     await goToGrid();
     await sleep(800);
+    // fill in media ids the chat had not drawn yet when the prompt was queued
+    for (const [i, it] of run.items.entries()) {
+      if (it.status === 'queued' && (it.mediaIds || []).length < (it.count || 1)) {
+        const ids = chatMediaIds(buildPrompt(cfg, run.prompts[i]));
+        if (ids.length) it.mediaIds = ids;
+      }
+    }
     let did = 0;
     let fullScan = false;
     for (let pass = 0; pass < 40 && !stopFlag && !pauseFlag; pass++) {
