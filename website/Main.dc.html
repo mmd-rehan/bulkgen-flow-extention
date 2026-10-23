@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BulkGen for Flow</title>
+<script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0D10}
+html{scroll-behavior:smooth}
+a{color:#E9ECEF;text-decoration:none}
+a:hover{color:#FFFFFF}
+summary{cursor:pointer}
+</style>
+</helmet>
+<div id="top" style="background:#0B0D10;color:#E9ECEF;font-family:'Inter',system-ui,sans-serif;font-size:17px;line-height:1.6;overflow-x:hidden">
+
+<!-- NAV -->
+<header style="max-width:1160px;margin:0 auto;padding:22px 24px;box-sizing:border-box;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px">
+<a href="#top" style="display:flex;align-items:center;gap:10px;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:22px;color:#E9ECEF">
+<svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true"><rect x="1.5" y="1.5" width="25" height="25" rx="7" stroke="{{accent}}" stroke-width="2"></rect><path d="M8 9h12M8 14h12M8 19h7" stroke="{{accent}}" stroke-width="2" stroke-linecap="round"></path></svg>
+<span>BulkGen</span>
+</a>
+<nav aria-label="Main" style="display:flex;flex-wrap:wrap;align-items:center;gap:26px;font-size:15px;font-weight:500">
+<a href="#how" style="color:#B6BDC6">How it works</a>
+<a href="#features" style="color:#B6BDC6">Features</a>
+<a href="#faq" style="color:#B6BDC6">FAQ</a>
+<a href="#get" style="background:{{accent}};color:#0B0D10;padding:11px 20px;border-radius:10px;font-weight:600">Get the extension</a>
+</nav>
+</header>
+
+<!-- HERO -->
+<section style="max-width:1160px;margin:0 auto;padding:64px 24px 88px;box-sizing:border-box;display:flex;flex-wrap:wrap;align-items:center;gap:56px">
+<div style="flex:1 1 460px;min-width:0;display:flex;flex-direction:column;gap:28px">
+<div style="display:flex;align-items:center;gap:10px;font-family:'JetBrains Mono',monospace;font-size:13px;color:#B6BDC6;letter-spacing:0.04em">
+<span style="width:8px;height:8px;border-radius:50%;background:{{accent}};display:inline-block"></span>
+<span>CHROME EXTENSION FOR GOOGLE FLOW</span>
+</div>
+<h1 style="margin:0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:clamp(42px,6vw,68px);line-height:1.02;letter-spacing:-0.02em">Paste your prompts once. Let Flow run itself.</h1>
+<p style="margin:0;font-size:20px;color:#B6BDC6;max-width:520px">BulkGen queues dozens of video prompts in Google Flow, approves each one, and downloads every finished clip. You press Start one time.</p>
+<div style="display:flex;flex-wrap:wrap;gap:14px">
+<a href="#get" style="background:{{accent}};color:#0B0D10;padding:16px 28px;border-radius:12px;font-weight:600;font-size:17px">Get the extension</a>
+<a href="#how" style="border:1px solid #333A44;padding:15px 28px;border-radius:12px;font-weight:500;font-size:17px;color:#E9ECEF">See how it works</a>
+</div>
+<p style="margin:0;font-size:14px;color:#9BA3AE">Beta. Works in Chrome with a signed in Flow account.</p>
+</div>
+
+<!-- Panel mock -->
+<div style="flex:1 1 400px;min-width:0;display:flex;flex-direction:column;gap:14px;align-items:center">
+<div style="width:100%;max-width:440px;box-sizing:border-box;background:#12161B;border:1px solid #232932;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;align-items:center;justify-content:space-between">
+<span style="font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:18px">BulkGen for Flow</span>
+<span style="font-size:13px;font-weight:500;padding:3px 12px;border-radius:99px;background:{{accent}};color:#0B0D10">Running</span>
+</div>
+<div style="background:#0B0D10;border:1px solid #232932;border-radius:12px;padding:14px;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.7;color:#B6BDC6">
+<div>A slow orbit around Saturn and its rings</div>
+<div>An astronaut outside the space station</div>
+<div>A rocket launching into a deep blue sky</div>
+<div>The Moon rising over a crater field</div>
+<div style="color:#7A838E">+ 26 more prompts</div>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:8px;font-size:13px;color:#B6BDC6">
+<span style="border:1px solid #2A313B;border-radius:8px;padding:4px 10px">6 sec</span>
+<span style="border:1px solid #2A313B;border-radius:8px;padding:4px 10px">16:9</span>
+<span style="border:1px solid #2A313B;border-radius:8px;padding:4px 10px">720p</span>
+<span style="border:1px solid #2A313B;border-radius:8px;padding:4px 10px">3 at once</span>
+<span style="border:1px solid #2A313B;border-radius:8px;padding:4px 10px">cap 15 credits</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="height:8px;border-radius:99px;background:#0B0D10;border:1px solid #232932;overflow:hidden"><div style="height:100%;width:40%;background:{{accent}}"></div></div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#9BA3AE">Queued 18 / 30 · Downloaded 12 · Failed 0</div>
+</div>
+<div style="background:#0B0D10;border:1px solid #232932;border-radius:12px;padding:12px 14px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.8;color:#9BA3AE">
+<div>Queued 18 of 30 (10 credits).</div>
+<div>Downloaded video 12 (menu).</div>
+<div>Submitting 19 of 30...</div>
+</div>
+</div>
+<p style="margin:0;font-size:13px;color:#7A838E">Illustration of the side panel. Numbers are an example.</p>
+</div>
+</section>
+
+<!-- HOW -->
+<section id="how" style="border-top:1px solid #1B2027;border-bottom:1px solid #1B2027;background:#0E1115">
+<div style="max-width:1160px;margin:0 auto;padding:96px 24px;box-sizing:border-box;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:14px;max-width:640px">
+<h2 style="margin:0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:clamp(32px,4.4vw,46px);line-height:1.1;letter-spacing:-0.015em">Set it up once. Then leave it.</h2>
+<p style="margin:0;color:#B6BDC6">Making twenty videos by hand means typing, waiting, approving and downloading twenty times. BulkGen does that loop for you.</p>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:24px">
+<div style="flex:1 1 300px;min-width:0;background:#12161B;border:1px solid #232932;border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:12px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:14px;color:{{accent}}">01</div>
+<h3 style="margin:0;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:22px">Paste your prompts</h3>
+<p style="margin:0;color:#B6BDC6;font-size:16px">One prompt per line. Add character notes and a style line that get added to every prompt, so your cast stays consistent.</p>
+</div>
+<div style="flex:1 1 300px;min-width:0;background:#12161B;border:1px solid #232932;border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:12px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:14px;color:{{accent}}">02</div>
+<h3 style="margin:0;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:22px">Choose your settings</h3>
+<p style="margin:0;color:#B6BDC6;font-size:16px">Pick the clip length, aspect, download quality, how many run at once, and the most credits you will pay for one video.</p>
+</div>
+<div style="flex:1 1 300px;min-width:0;background:#12161B;border:1px solid #232932;border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:12px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:14px;color:{{accent}}">03</div>
+<h3 style="margin:0;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:22px">Press Start</h3>
+<p style="margin:0;color:#B6BDC6;font-size:16px">It sends each prompt, approves the credit card, waits for the render, and saves the video to your Downloads folder. Then it moves to the next one.</p>
+</div>
+</div>
+</div>
+</section>
+
+<!-- FEATURES -->
+<section id="features" style="max-width:1160px;margin:0 auto;padding:96px 24px;box-sizing:border-box;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:14px;max-width:640px">
+<h2 style="margin:0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:clamp(32px,4.4vw,46px);line-height:1.1;letter-spacing:-0.015em">Everything the queue needs</h2>
+<p style="margin:0;color:#B6BDC6">Built from watching how Flow really behaves, not from guesses.</p>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:24px">
+
+<div style="flex:1 1 320px;min-width:0;border:1px solid #232932;border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:12px">
+<div style="color:{{accent}}"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"></path></svg></div>
+<h3 style="margin:0;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:21px">A queue that stays full</h3>
+<p style="margin:0;color:#B6BDC6;font-size:16px">Keeps a set number of videos rendering at the same time. As one finishes, the next prompt goes in.</p>
+</div>
+
+<div style="flex:1 1 320px;min-width:0;border:1px solid #232932;border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:12px">
+<div style="color:{{accent}}"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"></path></svg></div>
+<h3 style="margin:0;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:21px">Character and style notes</h3>
+<p style="margin:0;color:#B6BDC6;font-size:16px">Write who your character is once. The notes are added to every prompt so the look stays the same across clips.</p>
+</div>
+
+<div style="flex:1 1 320px;min-width:0;border:1px solid #232932;border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:12px">
+<div style="color:{{accent}}"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.500-1-8-4-8-9V6z"></path><path d="M9 12l2 2 4-4"></path></svg></div>
+<h3 style="margin:0;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:21px">Approval with a credit cap</h3>
+<p style="margin:0;color:#B6BDC6;font-size:16px">Reads the cost on each approval card. Anything above the limit you set is rejected instead of approved.</p>
+</div>
+
+<div style="flex:1 1 320px;min-width:0;border:1px solid #232932;border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:12px">
+<div style="color:{{accent}}"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"></path></svg></div>
+<h3 style="margin:0;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:21px">Automatic downloads</h3>
+<p style="margin:0;color:#B6BDC6;font-size:16px">Opens each finished video and saves it as 720p original or 1080p upscaled into a BulkGen folder, named from the video title.</p>
+</div>
+
+<div style="flex:1 1 320px;min-width:0;border:1px solid #232932;border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:12px">
+<div style="color:{{accent}}"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 10-3 6.200"></path><path d="M20 5v7h-7"></path></svg></div>
+<h3 style="margin:0;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:21px">Retries, then a clear message</h3>
+<p style="margin:0;color:#B6BDC6;font-size:16px">A failed download is retried the number of times you choose. After that it tells you which video to grab by hand and moves on.</p>
+</div>
+
+<div style="flex:1 1 320px;min-width:0;border:1px solid #232932;border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:12px">
+<div style="color:{{accent}}"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"></rect><rect x="14" y="5" width="4" height="14" rx="1"></rect></svg></div>
+<h3 style="margin:0;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:21px">Pause, stop and resume</h3>
+<p style="margin:0;color:#B6BDC6;font-size:16px">Stop the run any time. If the page reloads, the queue picks up where it left off and stays on your project.</p>
+</div>
+
+</div>
+</section>
+
+<!-- INSTALL -->
+<section id="get" style="border-top:1px solid #1B2027;border-bottom:1px solid #1B2027;background:#0E1115">
+<div style="max-width:1160px;margin:0 auto;padding:96px 24px;box-sizing:border-box;display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start">
+<div style="flex:1 1 420px;min-width:0;display:flex;flex-direction:column;gap:22px">
+<h2 style="margin:0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:clamp(32px,4.4vw,46px);line-height:1.1;letter-spacing:-0.015em">Install in two minutes</h2>
+<p style="margin:0;color:#B6BDC6">BulkGen is in beta, so you load it yourself in Chrome. No store account needed.</p>
+<a href="[YOUR DOWNLOAD LINK]" style="align-self:flex-start;background:{{accent}};color:#0B0D10;padding:16px 28px;border-radius:12px;font-weight:600;font-size:17px">Download BulkGen (zip)</a>
+<p style="margin:0;font-size:14px;color:#9BA3AE">Price: [YOUR PRICING]</p>
+</div>
+<ol style="flex:1 1 420px;min-width:0;margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:14px">
+<li style="display:flex;gap:16px;align-items:flex-start;background:#12161B;border:1px solid #232932;border-radius:14px;padding:18px 20px">
+<span style="font-family:'JetBrains Mono',monospace;color:{{accent}};font-size:15px;padding-top:2px">1</span>
+<span style="color:#D5DAE0;font-size:16px">Unzip the download to a folder you will keep.</span>
+</li>
+<li style="display:flex;gap:16px;align-items:flex-start;background:#12161B;border:1px solid #232932;border-radius:14px;padding:18px 20px">
+<span style="font-family:'JetBrains Mono',monospace;color:{{accent}};font-size:15px;padding-top:2px">2</span>
+<span style="color:#D5DAE0;font-size:16px">Open chrome://extensions and turn on Developer mode.</span>
+</li>
+<li style="display:flex;gap:16px;align-items:flex-start;background:#12161B;border:1px solid #232932;border-radius:14px;padding:18px 20px">
+<span style="font-family:'JetBrains Mono',monospace;color:{{accent}};font-size:15px;padding-top:2px">3</span>
+<span style="color:#D5DAE0;font-size:16px">Click Load unpacked and choose the folder.</span>
+</li>
+<li style="display:flex;gap:16px;align-items:flex-start;background:#12161B;border:1px solid #232932;border-radius:14px;padding:18px 20px">
+<span style="font-family:'JetBrains Mono',monospace;color:{{accent}};font-size:15px;padding-top:2px">4</span>
+<span style="color:#D5DAE0;font-size:16px">Open your Flow project, click the BulkGen icon, paste your prompts and press Start.</span>
+</li>
+</ol>
+</div>
+</section>
+
+<!-- FAQ -->
+<section id="faq" style="max-width:820px;margin:0 auto;padding:96px 24px;box-sizing:border-box;display:flex;flex-direction:column;gap:36px">
+<h2 style="margin:0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:clamp(32px,4.4vw,46px);line-height:1.1;letter-spacing:-0.015em">Questions</h2>
+<div style="display:flex;flex-direction:column">
+
+<details style="border-top:1px solid #232932;padding:22px 0">
+<summary style="font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:20px;color:#E9ECEF">Does it use my Google password?</summary>
+<p style="margin:14px 0 0;color:#B6BDC6;font-size:16px">No. It works inside the Flow tab you are already signed in to. It never asks for or stores a password.</p>
+</details>
+
+<details style="border-top:1px solid #232932;padding:22px 0">
+<summary style="font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:20px;color:#E9ECEF">Who pays for the videos?</summary>
+<p style="margin:0;margin-top:14px;color:#B6BDC6;font-size:16px">Your own Flow credits, exactly as if you clicked Approve yourself. A 6 second clip with Omni 1.1 Flash showed a cost of 10 credits when we tested. Set a credit cap so nothing pricier is approved.</p>
+</details>
+
+<details style="border-top:1px solid #232932;padding:22px 0">
+<summary style="font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:20px;color:#E9ECEF">Why does Chrome say it is debugging the browser?</summary>
+<p style="margin:14px 0 0;color:#B6BDC6;font-size:16px">Flow ignores clicks sent by scripts on its Start button, so BulkGen uses Chrome's debugger permission to send real clicks. Chrome shows a banner while a run is active. It goes away when the run ends.</p>
+</details>
+
+<details style="border-top:1px solid #232932;padding:22px 0">
+<summary style="font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:20px;color:#E9ECEF">Can I leave my computer while it runs?</summary>
+<p style="margin:14px 0 0;color:#B6BDC6;font-size:16px">Yes, but keep Chrome open and the computer awake, with the Flow tab left in place. The run lives in that tab.</p>
+</details>
+
+<details style="border-top:1px solid #232932;border-bottom:1px solid #232932;padding:22px 0">
+<summary style="font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:20px;color:#E9ECEF">Is it made by Google?</summary>
+<p style="margin:14px 0 0;color:#B6BDC6;font-size:16px">No. BulkGen is an independent tool. If Flow changes its page, the extension may need an update.</p>
+</details>
+
+</div>
+</section>
+
+<!-- FINAL CTA -->
+<section style="max-width:1160px;margin:0 auto;padding:0 24px 96px;box-sizing:border-box">
+<div style="background:{{accent}};color:#0B0D10;border-radius:24px;padding:56px 32px;display:flex;flex-direction:column;align-items:center;gap:22px;text-align:center">
+<h2 style="margin:0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:clamp(30px,4.4vw,48px);line-height:1.08;letter-spacing:-0.015em;max-width:720px">Feed it once. Come back to a folder full of videos.</h2>
+<a href="#get" style="background:#0B0D10;color:#FFFFFF;padding:16px 30px;border-radius:12px;font-weight:600;font-size:17px">Get the extension</a>
+</div>
+</section>
+
+<!-- FOOTER -->
+<footer style="border-top:1px solid #1B2027">
+<div style="max-width:1160px;margin:0 auto;padding:32px 24px 48px;box-sizing:border-box;display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;color:#9BA3AE;font-size:14px">
+<span>BulkGen for Flow, beta · bulkgen.mmd-rehan.com</span>
+<span style="max-width:560px">Independent tool, not affiliated with Google. Google Flow is a trademark of Google LLC.</span>
+</div>
+</footer>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#C8FF3D","options":["#C8FF3D","#7CE7FF","#FF9F5A"]},"$preview":{"width":1440,"height":3700}}'>
+class Component extends DCLogic {
+renderVals() {
+return { accent: this.props.accent ?? '#C8FF3D' };
+}
+}
+</script>
+</body>
+</html>

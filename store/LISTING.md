@@ -78,6 +78,6 @@ Certify all three statements (not sold, not used for unrelated purposes, not use
 https://github.com/mmd-rehan/bulkgen-flow-extention/blob/main/PRIVACY.md
 
 ## Images
-- Store icon: icons/icon128.png
+- Store icon: extension/icons/icon128.png
 - Screenshot: store/screenshot-1280x800.png (add 1 to 4 more real screenshots of a run if you can)
 - Small promo tile: store/promo-small-440x280.png
