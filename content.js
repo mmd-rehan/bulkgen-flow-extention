@@ -571,7 +571,13 @@
   }
 
   // ----- reference images (Flow "Ingredients") -----
-  const ingredientCount = () => document.querySelectorAll('img[alt="Ingredient image"]').length;
+  // Only count what is in the prompt box: grid rows show reference thumbnails too
+  function promptArea() {
+    let p = chatBox();
+    while (p && !p.querySelector('button[aria-label="Settings trigger"]')) p = p.parentElement;
+    return p || document.createElement('div');
+  }
+  const ingredientCount = () => promptArea().querySelectorAll('img[alt="Ingredient image"]').length;
 
   function dataUrlToFile(r) {
     const [head, b64] = r.dataUrl.split(',');
@@ -617,7 +623,7 @@
     const before = ingredientCount();
     const add = document.querySelector('button[aria-label="Add ingredients to the prompt box"]');
     if (!add) return false;
-    realClick(add);
+    add.click(); // plain click: this picker opens on pointerdown and would close again on the click
     const findItem = () => [...document.querySelectorAll('button.asset-item')].find((b) => visible(b) && norm(b.innerText).startsWith(name));
     if (!(await waitFor(() => document.querySelector('button.asset-item'), 4000))) return false;
     let item = await waitFor(findItem, 1500);
@@ -631,19 +637,19 @@
       }
     }
     if (!item) { escape(); await sleep(400); return false; }
-    realClick(item);
+    item.click();
     await sleep(500);
     const ok = [...document.querySelectorAll('button')].find((b) => visible(b) && /^add to prompt$/i.test(norm(b.innerText)));
     if (!ok) { escape(); await sleep(400); return false; }
-    realClick(ok);
+    ok.click();
     return !!(await waitFor(() => ingredientCount() > before, 6000));
   }
 
   async function clearRefs() {
     for (let i = 0; i < 8 && ingredientCount(); i++) {
-      const x = document.querySelector('button[aria-label="Ingredient"]');
+      const x = [...promptArea().querySelectorAll('button')].find((b) => norm(b.innerText) === 'cancel');
       if (!x) break;
-      realClick(x);
+      x.click();
       await sleep(400);
     }
   }
@@ -655,8 +661,9 @@
       if (ingredientCount()) { await clearRefs(); await log('Removed reference images left in the prompt box (this run does not use any).'); }
       return '';
     }
-    if (ingredientCount() >= refs.length) return '';
-    await clearRefs(); // a partial set cannot be told apart, so start clean
+    // What the box shows is not always what Flow will use (for example a reference restored after a
+    // page reload is shown but ignored), so always start clean and add the references again.
+    await clearRefs();
     run.uploaded = run.uploaded || {};
     for (const r of refs) {
       await setStep(`Adding reference image ${r.name}`);
@@ -665,6 +672,8 @@
         run.uploaded[r.name] = true;
         continue;
       }
+      // never upload the same image twice in a run, that only fills the library with copies
+      if (run.uploaded[r.name]) return `could not pick ${r.name} from the Flow library`;
       const err = await uploadRef(r, cfg);
       if (err) return err;
       run.uploaded[r.name] = true;
@@ -716,9 +725,11 @@
       await log(`${label} is already generating in Flow, not sending it again.`);
       return { ok: true, cost: run.costPer || 0, note: 'found in the grid after a retry or reload' };
     }
-    if (genTrigger() && !/video/i.test(genTrigger().innerText)) {
+    const summaryNow = () => (genTrigger() ? norm(genTrigger().innerText).replace(/crop_\S+\s*/g, '') : '');
+    if (genTrigger() && run.summary && summaryNow() !== run.summary) {
+      const was = summaryNow();
       const s2 = await applyPlainSettings(cfg);
-      await log(`Flow settings were reset, applied them again: ${s2.summary}.`, 'warn');
+      await log(`Flow settings changed (${was}), applied them again: ${s2.summary}.`, 'warn');
     }
     const refErr = await ensureRefs(cfg);
     if (refErr === 'rights') {
@@ -732,8 +743,13 @@
     await saveRun();
     await setStep(`Sending ${label}`);
     const text = buildPlainPrompt(cfg, p);
-    setText(box, text);
-    await sleep(400);
+    if (refs.length) await sleep(1200); // Flow redraws the box after adding references
+    for (let i = 0; i < 3; i++) {
+      setText(chatBox() || box, text);
+      await sleep(500);
+      if (sameText(boxText(), text)) break;
+    }
+    if (!sameText(boxText(), text)) throw new Error('could not type the prompt into the box');
     const btn = await waitFor(() => {
       const b = submitButton();
       return b && !b.disabled && b.getAttribute('aria-disabled') !== 'true' ? b : null;
@@ -1417,6 +1433,7 @@
         return { ok: false, error: 'Could not set up Flow: ' + e.message };
       }
       run.costPer = s1.credits || 0;
+      run.summary = s1.summary;
       const perVideo = s1.credits ? Math.round(s1.credits / count) : 0;
       await log(`Flow set to ${s1.model}: ${s1.summary}. Flow estimates ${s1.credits == null ? 'unknown' : s1.credits} credits per prompt.${s1.notes.length ? ' Note: ' + s1.notes.join(', ') + '.' : ''}`);
       const cap = parseInt(cfg.maxCredits, 10) || 0;
