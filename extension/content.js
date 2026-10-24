@@ -174,6 +174,12 @@
       );
       if (/what do you want to create/i.test(hint)) return el;
     }
+    // some Flow layouts word the placeholder differently: take the text field next to the settings chip
+    const chip = document.querySelector('button[aria-label="Settings trigger"]');
+    for (let p = chip && chip.parentElement; p && p !== document.body; p = p.parentElement) {
+      const el = [...p.querySelectorAll('textarea,[contenteditable="true"],[role=textbox]')].find(visible);
+      if (el) return el;
+    }
     return null;
   }
 
@@ -451,10 +457,18 @@
 
   function genPopup() {
     const leaf = [...document.querySelectorAll('div,span,p')].find((e) => e.children.length <= 2 && /^Generating will use/i.test(norm(e.textContent)) && visible(e));
-    let p = leaf;
-    while (p && !/Ingredients|Frames/.test(p.innerText || '')) p = p.parentElement;
-    return p || null;
+    if (leaf) {
+      let p = leaf;
+      while (p && !/Ingredients|Frames/.test(p.innerText || '')) p = p.parentElement;
+      if (p) return p;
+      // models without Ingredients or Frames: the nearest box that holds the popup buttons
+      for (p = leaf.parentElement; p && p !== document.body; p = p.parentElement) if (p.querySelectorAll('button').length >= 3) return p;
+    }
+    // popup without the credit line: an open overlay with aspect or count buttons
+    return popupOverlays().find((e) => /(^|\s)(16:9|9:16|x[1-4])(\s|$)/.test(norm(e.innerText))) || null;
   }
+
+  const popupOverlays = () => [...document.querySelectorAll('.cdk-overlay-pane,[role=dialog],[role=menu],[role=listbox],[data-radix-popper-content-wrapper]')].filter(visible);
 
   async function openGenPopup() {
     if (genPopup()) return genPopup();
@@ -489,7 +503,7 @@
 
   // Explains which part of opening the generation settings went wrong
   function genSettingsProblem() {
-    if (!chatBox()) return 'the prompt box was not found on the page';
+    if (!genTrigger() && !chatBox()) return 'neither the prompt box nor its settings chip was found on the page';
     if (!genTrigger()) return 'the prompt box has no settings chip (the button Flow labels "Settings trigger"). This Flow layout may not have one, try "Flow agent chat" in How to drive Flow';
     return 'the settings chip was clicked but the popup with "Generating will use N credits" did not appear (is Flow in English?)';
   }
@@ -1517,11 +1531,46 @@
     return { ok: true };
   }
 
+  // ---------- debug info ----------
+  // A text snapshot of the parts of the page BulkGen depends on, for users to send when something fails.
+  // It lists field placeholders, button labels and the settings popup, never prompt text or account details.
+  async function debugInfo() {
+    const lines = ['BulkGen debug info', 'Page: ' + pageInfo(), 'Window: ' + innerWidth + 'x' + innerHeight, ''];
+    lines.push('Text fields:');
+    for (const el of [...document.querySelectorAll('textarea,[contenteditable="true"],[role=textbox]')].filter(visible)) {
+      lines.push(`  ${el.tagName.toLowerCase()} placeholder="${el.getAttribute('placeholder') || el.getAttribute('data-placeholder') || el.getAttribute('aria-placeholder') || ''}" label="${el.getAttribute('aria-label') || ''}"`);
+    }
+    lines.push('', 'Buttons:');
+    for (const b of [...document.querySelectorAll('button')].filter(visible).slice(0, 100)) {
+      lines.push(`  label="${b.getAttribute('aria-label') || ''}" text="${short(b.innerText, 50)}" class="${short(b.className, 50)}"`);
+    }
+    lines.push('', 'Settings popup:');
+    const trigger = genTrigger();
+    if (!trigger) {
+      lines.push('  no settings chip');
+    } else {
+      const wasOpen = !!genPopup();
+      if (!wasOpen) { realClick(trigger); await sleep(1500); }
+      lines.push('  detected by BulkGen: ' + (genPopup() ? 'yes' : 'no'));
+      for (const o of popupOverlays()) {
+        lines.push(`  overlay ${o.tagName.toLowerCase()}.${short(o.className, 40)} role=${o.getAttribute('role') || ''}: ${short(o.innerText, 300)}`);
+        for (const b of [...o.querySelectorAll('button,[role=tab],[role=radio],[role=option],[role=menuitem]')].filter(visible).slice(0, 40)) {
+          lines.push(`    ${b.tagName.toLowerCase()} role=${b.getAttribute('role') || ''} label="${b.getAttribute('aria-label') || ''}" text="${short(b.innerText, 40)}"`);
+        }
+      }
+      if (!wasOpen) { realClick(trigger); await sleep(600); if (popupOverlays().length) escape(); }
+    }
+    return lines.join('\n');
+  }
+
   // ---------- messaging ----------
   async function onMessage(msg) {
     switch (msg && msg.type) {
       case 'bg-ping': return { ok: true, url: location.href, hasChat: !!chatBox(), looping };
       case 'bg-start': return startRun(msg.limit);
+      case 'bg-debug':
+        if (looping) return { ok: false, error: 'A run is going. Copy the debug info when it is finished.' };
+        return { ok: true, text: await debugInfo() };
       case 'bg-read-models':
         if (looping) return { ok: false, error: 'A run is going. Read the models when it is finished.' };
         return readModels();

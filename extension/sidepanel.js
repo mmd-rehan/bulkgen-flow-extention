@@ -415,6 +415,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (res && !res.ok) alert(res.error);
   };
   $('export').onclick = exportLog;
+  $('debug').onclick = async () => {
+    const res = await send('bg-debug');
+    if (!res) return;
+    if (!res.ok) return alert(res.error);
+    try {
+      await navigator.clipboard.writeText(res.text);
+      alert('Debug info copied. Paste it in a message to the developer.');
+    } catch (e) {
+      // clipboard blocked: save it as a file instead
+      chrome.downloads.download({ url: 'data:text/plain;charset=utf-8,' + encodeURIComponent(res.text), filename: 'BulkGen/bulkgen-debug-' + Date.now() + '.txt', saveAs: false });
+      alert('Debug info saved to Downloads/BulkGen. Send that file to the developer.');
+    }
+  };
   $('version').textContent = 'v' + chrome.runtime.getManifest().version;
   setInterval(() => render(lastRun), 15000); // keeps the "not reporting" check fresh
   $('pause').onclick = () => send('bg-pause');
