@@ -25,3 +25,7 @@ Chrome extension that queues many video prompts in Flow (flow.google.com), keeps
 To install without the store: download the zip from the latest release, unzip it, and load the folder with "Load unpacked" in chrome://extensions.
 
 BulkGen for Flow is an independent project and is not made, endorsed or supported by Google.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
