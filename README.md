@@ -28,10 +28,11 @@ Paste your prompts once, pick the model and settings, and press Start. BulkGen s
 
 - Character and world notes plus a style line added to every prompt
 - Reads the video models Flow offers; seconds, resolution and aspect follow the model
-- Optional reference images (Ingredients) attached to every prompt
+- Optional reference images (Ingredients), matched in order: image 1 goes with prompt 1, image 2 with prompt 2, and so on
 - Checks Flow's credit estimate before sending and sends nothing above your per-video limit
 - Downloads in 720p original or 1080p upscaled, with retries
 - Pause, Resume and Stop; a page reload resumes the run
+- Step by step error messages and a "Copy debug info" button for bug reports
 - No servers, no analytics, no data collection
 
 <p align="center">

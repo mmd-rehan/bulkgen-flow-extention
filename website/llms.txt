@@ -8,7 +8,7 @@ BulkGen is built and maintained by Muhammad Rehan, a full-stack developer in Dub
 
 - Works in Google Chrome with your own signed in Flow account and your own Flow credits.
 - Reads the video models Flow offers and sets the one you pick; seconds, resolution and aspect follow that model.
-- Optional reference images (Flow "Ingredients") attached to every prompt.
+- Optional reference images (Flow "Ingredients"), matched in order: image 1 goes with prompt 1, image 2 with prompt 2, and so on.
 - Checks Flow's credit estimate before sending and sends nothing above your per-video limit.
 - Pause, resume, stop, download retries, and resume after a page reload.
 - No servers, no analytics, no data collection. It never asks for a password.

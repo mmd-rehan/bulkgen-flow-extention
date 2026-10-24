@@ -21,14 +21,14 @@ WHAT IT DOES
 - One prompt per line, or separate longer prompts with a line containing ---
 - Character and world notes plus a style line added to every prompt, so a series stays consistent
 - Reads the video models Flow offers and sets the one you pick; seconds, resolution and aspect follow that model
-- Optional reference images (Ingredients) attached to every prompt, for models that accept them
+- Optional reference images (Ingredients) for models that accept them, matched in order: image 1 goes with prompt 1, image 2 with prompt 2. Any number of images; prompts past the last image go without one
 - Keeps up to your "At once" number of videos generating at the same time
 - Saves files as Downloads/BulkGen/flow_001_title.mp4, numbered in prompt order even when videos finish out of order
 - Downloads in 720p original or 1080p upscaled
 - Checks Flow's own credit estimate before sending and sends nothing if a video would cost more than your limit
 - Pause, Resume and Stop at any time; if the page reloads, the run picks up where it left off
 - Retries failed downloads and tells you clearly when it gives up
-- "Test with 1 prompt" button and a log you can export
+- "Test with 1 prompt" button, a log you can export, and a "Copy debug info" button that copies what BulkGen sees on the page for bug reports
 
 HOW TO USE
 1. Open your project on flow.google.com.
@@ -63,7 +63,7 @@ debugger:
 Flow ignores clicks sent by scripts on its generate and download buttons. BulkGen attaches the debugger only to the user's own Flow tab during a run and sends only mouse click events (Input.dispatchMouseEvent) at the button's position. It reads nothing through the debugger and detaches when the run ends.
 
 downloads:
-Saves each finished video into a BulkGen folder in Downloads with a name based on the prompt order and title, and tracks whether each download completed so it can retry. Also used for the "Export log" button.
+Saves each finished video into a BulkGen folder in Downloads with a name based on the prompt order and title, and tracks whether each download completed so it can retry. Also used for the "Export log" button, and to save the debug info as a file when the clipboard is not available.
 
 storage:
 Keeps the user's prompts, settings, run progress and log on the device so a run survives a page reload or browser restart.
