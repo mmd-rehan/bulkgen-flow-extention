@@ -1,0 +1,23 @@
+# BulkGen for Flow
+
+> BulkGen is a free, open source (MIT) Chrome extension for Google Flow (flow.google.com). You paste a list of video prompts once, pick the model and settings, and press Start. BulkGen sends the prompts one after another, keeps up to your chosen number of videos generating at once, and saves every finished video to Downloads/BulkGen with numbered names such as flow_001_title.mp4.
+
+BulkGen is built and maintained by Muhammad Rehan, a full-stack developer in Dubai: https://www.mmd-rehan.com/
+
+## Key facts
+
+- Works in Google Chrome with your own signed in Flow account and your own Flow credits.
+- Reads the video models Flow offers and sets the one you pick; seconds, resolution and aspect follow that model.
+- Optional reference images (Flow "Ingredients") attached to every prompt.
+- Checks Flow's credit estimate before sending and sends nothing above your per-video limit.
+- Pause, resume, stop, download retries, and resume after a page reload.
+- No servers, no analytics, no data collection. It never asks for a password.
+- Independent project, not made or endorsed by Google.
+
+## Links
+
+- [Website](https://bulkgen.mmd-rehan.com/)
+- [Download the latest release (zip)](https://github.com/mmd-rehan/bulkgen-flow-extention/releases/latest/download/bulkgen.zip)
+- [Source code on GitHub](https://github.com/mmd-rehan/bulkgen-flow-extention)
+- [Privacy policy](https://bulkgen.mmd-rehan.com/privacy)
+- [Muhammad Rehan, the maker](https://www.mmd-rehan.com/)

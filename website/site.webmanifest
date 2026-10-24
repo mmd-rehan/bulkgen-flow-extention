@@ -1,0 +1,14 @@
+{
+  "name": "BulkGen for Flow",
+  "short_name": "BulkGen",
+  "description": "Free, open source Chrome extension that queues video prompts in Google Flow and downloads every finished video.",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#0B0D10",
+  "theme_color": "#0B0D10",
+  "icons": [
+    { "src": "/assets/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/assets/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

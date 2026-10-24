@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 64" role="img" aria-label="BulkGen">
+  <rect width="64" height="64" rx="15" fill="#C8FF3D"/>
+  <rect x="21" y="11" width="30" height="21" rx="4" fill="#94BC2E"/>
+  <rect x="17" y="16" width="30" height="21" rx="4" fill="#55701B"/>
+  <rect x="13" y="21" width="30" height="21" rx="4" fill="#0B0D10"/>
+  <path d="M25 26.5 L33 31.5 L25 36.5 Z" fill="#C8FF3D"/>
+  <path d="M28 46 v8 M24 50.5 l4 4 l4 -4" stroke="#0B0D10" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <text x="80" y="44" font-family="Space Grotesk, Inter, Arial, sans-serif" font-weight="700" font-size="36" fill="#E9ECEF">BulkGen</text>
+</svg>

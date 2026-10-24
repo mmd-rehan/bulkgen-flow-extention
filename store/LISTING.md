@@ -88,7 +88,7 @@ Collected data types: tick none. The extension does not collect or transmit user
 Certify all three statements (not sold, not used for unrelated purposes, not used for credit decisions).
 
 ## Privacy policy URL
-https://github.com/mmd-rehan/bulkgen-flow-extention/blob/main/PRIVACY.md
+https://bulkgen.mmd-rehan.com/privacy
 
 ## Images
 - Store icon: extension/icons/icon128.png

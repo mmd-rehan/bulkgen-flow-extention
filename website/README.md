@@ -1,21 +1,12 @@
-# Landing page — design reference
+# BulkGen website
 
-This is a design mockup created in a visual design tool, exported as a
-standalone page. Treat it as a REFERENCE MOCKUP, not production code:
-the markup and inline styles carry the design's precise values — colors,
-font sizes, spacing, radii, shadows, layout — which an implementation
-should replicate faithfully in its own components and styling system
-rather than copy wholesale.
+Static landing page for BulkGen for Flow, served by Vercel at https://bulkgen.mmd-rehan.com (project root directory: `website`).
 
-## Contents
+- `index.html` home page, with SEO meta tags, Open Graph and Twitter cards, and JSON-LD (WebSite, SoftwareApplication, SoftwareSourceCode, Person)
+- `privacy.html` privacy policy (served at /privacy), `404.html` not found page
+- `assets/` logo, wordmark, app icons, Open Graph image
+- `favicon.ico`, `favicon.svg`, `apple-touch-icon.png`, `site.webmanifest`
+- `robots.txt`, `sitemap.xml`, `llms.txt`
+- `vercel.json` clean URLs and response headers
 
-- `index.html` — the artboard (a Design Component: an `<x-dc>`
-  template + a small logic class). The values to replicate live in its
-  inline `style="…"` attributes and the `<helmet><style>` block.
-- `support.js`, `vendor/react*.js` — the runtime that renders the
-  component in a browser; not part of the design.
-
-## Viewing
-
-Serve the folder (e.g. `python3 -m http.server`) and open `index.html`;
-some browsers block the scripts over file://.
+Preview locally: `python3 -m http.server` in this folder, then open http://localhost:8000.
