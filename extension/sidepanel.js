@@ -93,7 +93,7 @@ function renderModels() {
 
 function renderModelOptions() {
   const m = models.find((x) => x.name === $('model').value);
-  const durations = m && m.durations.length ? m.durations : (m ? [] : ['4', '6', '8', '10']);
+  const durations = m && m.durations.length ? m.durations : (m && !m.fromSettings ? [] : ['4', '6', '8', '10']);
   if (durations.length) {
     fillSelect($('duration'), durations, String(savedCfg.duration || ''), '6');
     $('duration').disabled = false;
@@ -120,6 +120,11 @@ async function readModels(quiet) {
     const res = await send('bg-read-models', null, quiet);
     if (res && res.ok) {
       models = res.models;
+      // this Flow layout has no settings chip in the prompt box, so only the agent chat can drive it
+      if (res.layout === 'agent' && $('engine').value !== 'agent') {
+        $('engine').value = 'agent';
+        if (!quiet) alert('Your Flow layout has no settings chip in the prompt box, so BulkGen switched "How to drive Flow" to "Flow agent chat". The model is set in Flow\'s Settings panel at Start.');
+      }
       renderModels();
       await saveForm();
     } else if (res && !quiet) {

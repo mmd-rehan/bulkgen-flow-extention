@@ -378,13 +378,14 @@
     const h = [...document.querySelectorAll('div,span,h2,h3,label')].find((e) => e.children.length === 0 && norm(e.textContent) === 'Confirm before generating');
     let p = h;
     while (p && !/\bSave\b/.test(p.innerText || '')) p = p.parentElement;
-    return p;
+    // some Flow layouts show the settings as a dialog without the confirm option
+    return p || [...document.querySelectorAll('[role=dialog]')].find((d) => visible(d) && d.querySelector('button[aria-haspopup]')) || null;
   }
 
   async function openSettings() {
     if (settingsPanel()) return settingsPanel();
     const btns = [...document.querySelectorAll('button[aria-label="Settings"]')].filter(visible);
-    const btn = btns.find((b) => /tune/.test(b.innerText)) || btns[btns.length - 1];
+    const btn = btns.find((b) => /tune/.test(b.innerText)) || btns[btns.length - 1] || findClickable(/^(tune\s+)?settings$/i);
     if (!btn) return null;
     realClick(btn);
     let p = await waitFor(settingsPanel, 3000);
@@ -527,8 +528,13 @@
   // Reads the video models Flow offers (and what each one supports) for the side panel
   async function readModels() {
     await goToGrid();
-    if (!(await setAgentMode(false))) return { ok: false, error: 'Could not switch Flow to plain mode (Agent toggle).' };
-    if (!(await openGenPopup())) return { ok: false, error: 'Could not open the generation settings in the prompt box.' };
+    if (!(await setAgentMode(false)) || !(await openGenPopup())) {
+      const names = await readModelsFromSettings();
+      if (!names.length) return { ok: false, error: 'Could not read the models. Flow showed neither the settings chip in the prompt box nor a model list in Settings. Make sure the project page is open and Flow is in English, then try again.' };
+      const info = { models: names.map((name) => ({ name, durations: [], resolutions: [], aspects: [], ingredients: false, frames: false, credits: null, fromSettings: true })), layout: 'agent', at: Date.now() };
+      await store.set('bg_models', info);
+      return Object.assign({ ok: true }, info);
+    }
     await popClick('Video');
     const startName = modelButton() ? cleanName(modelButton().innerText) : '';
     const items = await openModelMenu();
@@ -544,6 +550,27 @@
     const info = { models, at: Date.now() };
     await store.set('bg_models', info);
     return Object.assign({ ok: true }, info);
+  }
+
+  // Layouts without the settings chip in the prompt box keep the model list in the Settings panel.
+  // Only the names can be read there, so length and resolution are left to the side panel defaults.
+  async function readModelsFromSettings() {
+    const panel = await openSettings();
+    if (!panel) return [];
+    const dd = [...panel.querySelectorAll('button[aria-haspopup]')].pop();
+    let names = [];
+    if (dd) {
+      realClick(dd);
+      const items = await waitFor(() => { const l = [...document.querySelectorAll('[role=menuitem],[role=menuitemradio],[role=option]')].filter(visible); return l.length ? l : null; }, 2500);
+      names = items ? items.map((e) => cleanName(e.innerText)).filter(Boolean) : [];
+      escape();
+      await sleep(400);
+    }
+    // close without saving
+    const close = [...panel.querySelectorAll('button')].find((b) => /^(close|cancel)$/i.test(accName(b)));
+    if (close) realClick(close); else escape();
+    await sleep(400);
+    return names;
   }
 
   async function applyPlainSettings(cfg) {
@@ -1431,10 +1458,11 @@
     await saveRun();
     if (cfg.engine === 'agent') {
       if (await setAgentMode(true) === false) await log('Could not turn on Flow\'s Agent mode.', 'warn');
-      if (cfg.confirmNever) await log(await applyFlowSettings({ confirmNever: true }));
+      if (cfg.confirmNever || cfg.model) await log(await applyFlowSettings({ model: cfg.model, aspect: cfg.aspect, count: cfg.count, confirmNever: cfg.confirmNever ? true : undefined }));
     } else {
       let s1;
       try { s1 = await applyPlainSettings(cfg); } catch (e) {
+        if (!genTrigger()) e.message += '. Your Flow layout has no settings chip in the prompt box: set "How to drive Flow" to "Flow agent chat" and press Start again';
         run.running = false; run.stuck = 'Could not set up Flow: ' + e.message; await saveRun();
         return { ok: false, error: 'Could not set up Flow: ' + e.message };
       }
