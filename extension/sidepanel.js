@@ -1,7 +1,7 @@
 const $ = (id) => document.getElementById(id);
-const FIELDS = ['prompts', 'character', 'style', 'duration', 'aspect', 'count', 'model', 'maxInFlight', 'maxCredits', 'prefix', 'retries', 'downloadRetries', 'quality', 'confirmNever', 'timeoutMin', 'engine', 'resolution', 'useRefs', 'refsRights'];
-const VALUE_FIELDS = ['character', 'style', 'aspect', 'count', 'maxInFlight', 'maxCredits', 'prefix', 'retries', 'downloadRetries', 'quality', 'timeoutMin', 'engine'];
-const MAX_REFS = 3;
+const FIELDS = ['prompts', 'character', 'style', 'duration', 'aspect', 'count', 'model', 'maxInFlight', 'maxCredits', 'prefix', 'retries', 'downloadRetries', 'quality', 'confirmNever', 'timeoutMin', 'engine', 'resolution', 'useRefs', 'refsRights', 'refMode'];
+const VALUE_FIELDS = ['character', 'style', 'aspect', 'count', 'maxInFlight', 'maxCredits', 'prefix', 'retries', 'downloadRetries', 'quality', 'timeoutMin', 'engine', 'refMode'];
+const MAX_SHARED_REFS = 3; // Flow takes up to 3 reference images on one prompt
 let models = []; // what Flow offers, read by the content script
 let savedCfg = {};
 
@@ -25,6 +25,7 @@ function readForm() {
     resolution: $('resolution').value,
     useRefs: $('useRefs').checked && !$('refsBox').hidden,
     refsRights: $('refsRights').checked,
+    refMode: $('refMode').value,
     maxInFlight: Math.max(1, parseInt($('maxInFlight').value, 10) || 2),
     maxCredits: Math.max(0, parseInt($('maxCredits').value, 10) || 0),
     prefix: ($('prefix').value || 'flow').replace(/[^\w-]+/g, '_'),
@@ -155,35 +156,84 @@ function shrinkImage(file, maxSide = 1536) {
   });
 }
 
+async function changeRefs(fn) {
+  const cur = (await chrome.storage.local.get('bg_refs')).bg_refs || [];
+  fn(cur);
+  await chrome.storage.local.set({ bg_refs: cur });
+  renderRefs();
+}
+
+function smallButton(text, title, onclick) {
+  const b = document.createElement('button');
+  b.textContent = text;
+  b.title = title;
+  b.onclick = onclick;
+  return b;
+}
+
+// "each" mode lists the images as rows next to the prompt they go with, so the order is easy to check
 async function renderRefs() {
-  const { bg_refs } = await chrome.storage.local.get('bg_refs');
+  const refs = (await chrome.storage.local.get('bg_refs')).bg_refs || [];
+  const prompts = parsePrompts($('prompts').value);
+  const each = $('refMode').value !== 'all';
   const list = $('refList');
   list.innerHTML = '';
-  for (const [i, r] of (bg_refs || []).entries()) {
-    const d = document.createElement('div');
-    d.className = 'ref';
-    d.title = r.name;
+  list.className = each ? 'refs each' : 'refs';
+  for (const [i, r] of refs.entries()) {
     const img = document.createElement('img');
     img.src = r.dataUrl;
-    const x = document.createElement('button');
-    x.textContent = 'x';
-    x.title = 'Remove';
-    x.onclick = async () => {
-      const cur = (await chrome.storage.local.get('bg_refs')).bg_refs || [];
-      cur.splice(i, 1);
-      await chrome.storage.local.set({ bg_refs: cur });
-      renderRefs();
-    };
-    d.append(img, x);
-    list.appendChild(d);
+    const remove = smallButton('x', 'Remove', () => changeRefs((cur) => cur.splice(i, 1)));
+    if (each) {
+      const row = document.createElement('div');
+      row.className = 'refrow';
+      const txt = document.createElement('div');
+      txt.className = 'txt';
+      const b = document.createElement('b');
+      b.textContent = `Prompt ${i + 1}`;
+      const s = document.createElement('span');
+      s.textContent = prompts[i] || 'No prompt with this number, not used';
+      if (!prompts[i]) s.className = 'none';
+      s.title = prompts[i] || '';
+      txt.append(b, s);
+      row.title = r.label || r.name;
+      const up = smallButton('↑', 'Move up', () => changeRefs((cur) => cur.splice(i - 1, 2, cur[i], cur[i - 1])));
+      const down = smallButton('↓', 'Move down', () => changeRefs((cur) => cur.splice(i, 2, cur[i + 1], cur[i])));
+      up.disabled = i === 0;
+      down.disabled = i === refs.length - 1;
+      row.append(img, txt, up, down, remove);
+      list.appendChild(row);
+    } else {
+      const d = document.createElement('div');
+      d.className = 'ref';
+      d.title = r.label || r.name;
+      const num = document.createElement('span');
+      num.className = 'num';
+      num.textContent = i + 1;
+      d.append(img, num, remove);
+      list.appendChild(d);
+    }
   }
+  let note = '';
+  if (each) {
+    note = `${refs.length} image${refs.length === 1 ? '' : 's'} for ${prompts.length} prompt${prompts.length === 1 ? '' : 's'}.`;
+    if (refs.length && refs.length < prompts.length) note += ` Prompts ${refs.length + 1} to ${prompts.length} go without a reference image.`;
+    if (refs.length > prompts.length) note += ` Images ${prompts.length + 1} to ${refs.length} are not used.`;
+  } else {
+    note = refs.length > MAX_SHARED_REFS ? `Only the first ${MAX_SHARED_REFS} images are used, Flow takes up to ${MAX_SHARED_REFS} on one prompt.` : 'Every prompt gets all of these images.';
+  }
+  $('refNote').textContent = note;
 }
 
 async function addRefs(files) {
   const cur = (await chrome.storage.local.get('bg_refs')).bg_refs || [];
-  for (const f of files) {
-    if (cur.length >= MAX_REFS) { alert(`Up to ${MAX_REFS} reference images.`); break; }
-    try { cur.push(await shrinkImage(f)); } catch (e) { alert(e.message); }
+  // a unique name, because later prompts find the image in Flow's library by its name
+  const stamp = Date.now().toString(36).slice(-5);
+  for (const [k, f] of files.entries()) {
+    if ($('refMode').value === 'all' && cur.length >= MAX_SHARED_REFS) { alert(`Up to ${MAX_SHARED_REFS} images when every prompt gets the same images.`); break; }
+    try {
+      const r = await shrinkImage(f);
+      cur.push({ name: `${stamp}${k}-${r.name.replace(/[^\w.-]+/g, '_')}`, label: f.name, dataUrl: r.dataUrl });
+    } catch (e) { alert(e.message); }
   }
   await chrome.storage.local.set({ bg_refs: cur });
   $('refFiles').value = '';
@@ -333,6 +383,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   for (const f of FIELDS) $(f).addEventListener(['useRefs', 'refsRights', 'confirmNever'].includes(f) ? 'change' : 'input', saveForm);
   for (const f of ['model', 'engine', 'useRefs']) $(f).addEventListener('change', async () => { await saveForm(); renderModelOptions(); await saveForm(); });
+  $('refMode').addEventListener('change', renderRefs);
+  let refsTimer;
+  $('prompts').addEventListener('input', () => { clearTimeout(refsTimer); refsTimer = setTimeout(renderRefs, 400); });
   $('readModels').onclick = () => readModels(false);
   // starts over when the saved models or mode no longer match Flow
   $('resetModels').onclick = async () => {

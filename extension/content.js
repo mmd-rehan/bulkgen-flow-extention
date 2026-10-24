@@ -471,6 +471,29 @@
     if (!(await waitFor(() => !genPopup(), 1500))) { escape(); await sleep(400); }
   }
 
+  // What BulkGen sees on the page. Added to error messages so a screenshot of the log shows why a step failed.
+  function pageInfo() {
+    const chip = agentChip();
+    return [
+      'v' + chrome.runtime.getManifest().version,
+      'page ' + location.pathname.replace(/[0-9a-f-]{36}/gi, 'ID'),
+      'language ' + (document.documentElement.lang || 'unknown'),
+      'prompt box ' + (chatBox() ? 'found' : 'missing'),
+      'Agent toggle ' + (chip ? (chip.getAttribute('aria-pressed') === 'true' ? 'on' : 'off') : 'missing'),
+      'settings chip ' + (genTrigger() ? 'found' : 'missing'),
+      'settings popup ' + (genPopup() ? 'open' : 'closed')
+    ].join(', ');
+  }
+
+  const stepError = (step, why) => new Error(`Step "${step}" failed: ${why}`);
+
+  // Explains which part of opening the generation settings went wrong
+  function genSettingsProblem() {
+    if (!chatBox()) return 'the prompt box was not found on the page';
+    if (!genTrigger()) return 'the prompt box has no settings chip (the button Flow labels "Settings trigger"). This Flow layout may not have one, try "Flow agent chat" in How to drive Flow';
+    return 'the settings chip was clicked but the popup with "Generating will use N credits" did not appear (is Flow in English?)';
+  }
+
   const popButtons = () => { const p = genPopup(); return p ? [...p.querySelectorAll('button,[role=tab],[role=radio]')].filter(visible) : []; };
   const hasWord = (el, word) => new RegExp('(^|\\s)' + word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\s|$)', 'i').test(norm(el.innerText));
   const isOnBtn = (b) => [b.getAttribute('aria-selected'), b.getAttribute('aria-checked'), b.getAttribute('aria-pressed')].includes('true');
@@ -528,9 +551,11 @@
   // Reads the video models Flow offers (and what each one supports) for the side panel
   async function readModels() {
     await goToGrid();
-    if (!(await setAgentMode(false)) || !(await openGenPopup())) {
+    const agentOff = await setAgentMode(false);
+    if (!agentOff || !(await openGenPopup())) {
+      const why = agentOff ? genSettingsProblem() : 'clicked Flow\'s Agent toggle but it stayed on';
       const names = await readModelsFromSettings();
-      if (!names.length) return { ok: false, error: 'Could not read the models. Flow showed neither the settings chip in the prompt box nor a model list in Settings. Make sure the project page is open and Flow is in English, then try again.' };
+      if (!names.length) return { ok: false, error: `Could not read the models.\n\nStep "${agentOff ? 'Open the generation settings' : 'Turn off Flow\'s Agent mode'}" failed: ${why}.\nThe Settings panel had no model list either.\n\nPage: ${pageInfo()}` };
       const info = { models: names.map((name) => ({ name, durations: [], resolutions: [], aspects: [], ingredients: false, frames: false, credits: null, fromSettings: true })), layout: 'agent', at: Date.now() };
       await store.set('bg_models', info);
       return Object.assign({ ok: true }, info);
@@ -575,8 +600,8 @@
 
   async function applyPlainSettings(cfg) {
     await goToGrid();
-    if (!(await setAgentMode(false))) throw new Error("could not turn off Flow's Agent mode");
-    if (!(await openGenPopup())) throw new Error('could not open the generation settings in the prompt box');
+    if (!(await setAgentMode(false))) throw stepError("Turn off Flow's Agent mode", "clicked Flow's Agent toggle but it stayed on");
+    if (!(await openGenPopup())) throw stepError('Open the generation settings', genSettingsProblem());
     const notes = [];
     await popClick('Video');
     await popClick('Ingredients');
@@ -681,11 +706,18 @@
     }
   }
 
-  async function ensureRefs(cfg) {
-    const refs = cfg.useRefs ? await store.get('bg_refs', []) : [];
+  // Which saved images go with prompt idx: one each in upload order, or the same set (up to 3) on every prompt
+  async function refsFor(cfg, idx) {
+    if (!cfg.useRefs) return [];
+    const refs = await store.get('bg_refs', []);
+    if (cfg.refMode === 'all') return refs.slice(0, 3);
+    return refs[idx] ? [refs[idx]] : [];
+  }
+
+  async function ensureRefs(refs, cfg, idx) {
     if (!refs.length) {
-      // something left in the prompt box would end up in every video
-      if (ingredientCount()) { await clearRefs(); await log('Removed reference images left in the prompt box (this run does not use any).'); }
+      // something left in the prompt box would end up in this video
+      if (ingredientCount()) { await clearRefs(); await log(`Removed reference images left in the prompt box (prompt ${idx + 1} has none).`); }
       return '';
     }
     // What the box shows is not always what Flow will use (for example a reference restored after a
@@ -693,18 +725,20 @@
     await clearRefs();
     run.uploaded = run.uploaded || {};
     for (const r of refs) {
-      await setStep(`Adding reference image ${r.name}`);
+      const what = `${r.label || r.name} for prompt ${idx + 1}`;
+      await setStep(`Adding reference image ${what}`);
       if (await attachFromLibrary(r.name)) {
-        if (!run.uploaded[r.name]) await log(`Reference image ${r.name} taken from the Flow library.`);
+        if (!run.uploaded[r.name]) await log(`Reference image ${what} taken from the Flow library.`);
         run.uploaded[r.name] = true;
         continue;
       }
       // never upload the same image twice in a run, that only fills the library with copies
-      if (run.uploaded[r.name]) return `could not pick ${r.name} from the Flow library`;
+      if (run.uploaded[r.name]) return `${what}: uploaded earlier in this run but not found in the Flow library under the name ${r.name}`;
       const err = await uploadRef(r, cfg);
-      if (err) return err;
+      if (err === 'rights') return err;
+      if (err) return `${what}: ${err}`;
       run.uploaded[r.name] = true;
-      await log(`Reference image ${r.name} uploaded to Flow and added to the prompt box.`);
+      await log(`Reference image ${what} uploaded to Flow and added to the prompt box.`);
     }
     await sleep(1000);
     if (ingredientCount() !== refs.length) {
@@ -740,9 +774,9 @@
     const p = run.prompts[idx];
     item.text = buildPlainPrompt(cfg, p);
     await goToGrid();
-    if (!(await setAgentMode(false))) throw new Error("could not turn off Flow's Agent mode");
+    if (!(await setAgentMode(false))) throw stepError("Turn off Flow's Agent mode", "clicked Flow's Agent toggle but it stayed on");
     const box = await waitFor(chatBox, 8000);
-    if (!box) throw new Error('Prompt box not found. Is the Flow project page open?');
+    if (!box) throw stepError('Find the prompt box', 'no prompt box on the page after 8 seconds. Is the Flow project page open?');
     const toTop = () => { const sc = gridScroller(); if (sc) sc.scrollTop = 0; };
     toTop();
     await sleep(500);
@@ -758,13 +792,13 @@
       const s2 = await applyPlainSettings(cfg);
       await log(`Flow settings changed (${was}), applied them again: ${s2.summary}.`, 'warn');
     }
-    const refErr = await ensureRefs(cfg);
+    const refs = await refsFor(cfg, idx);
+    const refErr = await ensureRefs(refs, cfg, idx);
     if (refErr === 'rights') {
       return { ok: false, fatal: true, reason: 'Flow asks you to confirm you have the rights to the reference image. Click "I agree" in Flow, or tick the rights box in the panel' };
     }
-    if (refErr) throw new Error('reference image: ' + refErr);
+    if (refErr) throw stepError('Add reference image', refErr);
 
-    const refs = cfg.useRefs ? await store.get('bg_refs', []) : [];
     item.tilesBefore = tilesFor(idx).length;
     item.status = 'sending';
     await saveRun();
@@ -776,13 +810,13 @@
       await sleep(500);
       if (sameText(boxText(), text)) break;
     }
-    if (!sameText(boxText(), text)) throw new Error('could not type the prompt into the box');
+    if (!sameText(boxText(), text)) throw stepError('Type the prompt', 'tried 3 times but the prompt box did not keep the text');
     const btn = await waitFor(() => {
       const b = submitButton();
       return b && !b.disabled && b.getAttribute('aria-disabled') !== 'true' ? b : null;
     }, 20000); // a fresh upload keeps it disabled for a few seconds
-    if (!btn) throw new Error('Start generation button stayed disabled');
-    if (refs.length && ingredientCount() !== refs.length) throw new Error(`the prompt box has ${ingredientCount()} reference images instead of ${refs.length}`);
+    if (!btn) throw stepError('Click Start generation', submitButton() ? 'the Start generation button stayed disabled for 20 seconds' : 'no Start generation button found next to the prompt box');
+    if (refs.length && ingredientCount() !== refs.length) throw stepError('Check reference images', `the prompt box has ${ingredientCount()} reference images instead of ${refs.length}`);
     const t0 = Date.now();
     await trustedClick(btn);
     const started = () => { toTop(); return tilesFor(idx).length > item.tilesBefore; };
@@ -1360,7 +1394,7 @@
           } else {
             item.tries = (item.tries || 0) + 1;
             const maxTries = Math.max(1, parseInt(cfg.retries, 10) || 3);
-            await log(`Prompt ${idx + 1} try ${item.tries} of ${maxTries} failed: ${res.reason}.`, 'warn');
+            await log(`Prompt ${idx + 1} try ${item.tries} of ${maxTries} failed: ${res.reason}. Page: ${pageInfo()}`, 'warn');
             if (res.resend) {
               delete item.sentBefore; // safe to send it again on the next try
               await log(`Prompt ${idx + 1} will be sent again on the next try.`);
@@ -1420,7 +1454,7 @@
         detachDebugger();
       }
     } catch (e) {
-      await log('Run stopped by an error: ' + e.message, 'error');
+      await log(`Run stopped by an error: ${e.message}. Page: ${pageInfo()}`, 'error');
       if (run) { run.running = false; run.stuck = 'Stopped by an error: ' + e.message; await saveRun(); }
     } finally {
       looping = false;
@@ -1436,7 +1470,7 @@
     if (!/^\/project\//.test(location.pathname)) return { ok: false, error: 'Open a Flow project page first.' };
     stopFlag = false; pauseFlag = false;
     run = { running: true, log: [], items: [], prompts: [], startedAt: Date.now(), step: 'Starting' };
-    await log(`Starting ${prompts.length} prompt${prompts.length > 1 ? 's' : ''} (${cfg.engine === 'agent' ? 'Flow agent' : 'plain mode'}), ${cfg.maxInFlight || 2} at once, ${cfg.model || 'current model'}, ${cfg.duration}s, download ${cfg.quality || '720p'}, cap ${cfg.maxCredits || 'none'} credits per video${cfg.useRefs ? ', with reference images' : ''}.`);
+    await log(`Starting ${prompts.length} prompt${prompts.length > 1 ? 's' : ''} (${cfg.engine === 'agent' ? 'Flow agent' : 'plain mode'}), ${cfg.maxInFlight || 2} at once, ${cfg.model || 'current model'}, ${cfg.duration}s, download ${cfg.quality || '720p'}, cap ${cfg.maxCredits || 'none'} credits per video${cfg.useRefs ? (cfg.refMode === 'all' ? ', same reference images on every prompt' : ', one reference image per prompt in order') : ''}.`);
     await goToGrid();
     // wait until the grid has finished drawing so existing media is not mistaken for new output
     let existing = [];
@@ -1462,9 +1496,9 @@
     } else {
       let s1;
       try { s1 = await applyPlainSettings(cfg); } catch (e) {
-        if (!genTrigger()) e.message += '. Your Flow layout has no settings chip in the prompt box: set "How to drive Flow" to "Flow agent chat" and press Start again';
-        run.running = false; run.stuck = 'Could not set up Flow: ' + e.message; await saveRun();
-        return { ok: false, error: 'Could not set up Flow: ' + e.message };
+        await log(`Could not set up Flow before the first prompt. ${e.message}. Page: ${pageInfo()}`, 'error');
+        run.running = false; run.stuck = 'Could not set up Flow. ' + e.message; await saveRun();
+        return { ok: false, error: `Could not set up Flow before the first prompt.\n\n${e.message}.\n\nPage: ${pageInfo()}` };
       }
       run.costPer = s1.credits || 0;
       run.summary = s1.summary;
@@ -1523,7 +1557,7 @@
             const s = await applyPlainSettings(cfg);
             res = `Flow set to ${s.model}: ${s.summary}. Flow estimates ${s.credits == null ? 'unknown' : s.credits} credits per prompt.${s.notes.length ? ' Note: ' + s.notes.join(', ') + '.' : ''}`;
           } catch (e) {
-            res = 'Could not apply the settings: ' + e.message + (genTrigger() ? '' : '. Your Flow layout has no settings chip in the prompt box, try "Flow agent chat"');
+            res = `Could not apply the settings. ${e.message}. Page: ${pageInfo()}`;
           }
         }
         await log(res);

@@ -38,9 +38,15 @@
   </section>
 
   <section id="refsBox" hidden>
-    <label class="check"><input id="useRefs" type="checkbox"> Use reference images <small>(Flow "Ingredients": same characters, objects or style in every video)</small></label>
+    <label class="check"><input id="useRefs" type="checkbox"> Use reference images <small>(Flow "Ingredients")</small></label>
     <div id="refsOn" hidden>
+      <label for="refMode">How to use them</label>
+      <select id="refMode">
+        <option value="each">One image per prompt, in order (image 1 goes with prompt 1)</option>
+        <option value="all">Same images on every prompt (up to 3)</option>
+      </select>
       <input id="refFiles" type="file" accept="image/png,image/jpeg,image/webp" multiple>
+      <small id="refNote" class="note"></small>
       <div id="refList" class="refs"></div>
       <label class="check"><input id="refsRights" type="checkbox"> I own the rights to these images. Let BulkGen click "I agree" on Flow's "Rights to use this image" dialog.</label>
     </div>

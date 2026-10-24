@@ -36,4 +36,14 @@ button.wide { width:100%; margin-top:6px; }
 .refs { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0; }
 .refs .ref { position:relative; width:64px; height:64px; border-radius:6px; overflow:hidden; border:1px solid var(--line); }
 .refs img { width:100%; height:100%; object-fit:cover; display:block; }
-.refs button { position:absolute; top:2px; right:2px; padding:0 5px; font-size:11px; line-height:16px; border-radius:99px; }
+.refs .ref button { position:absolute; top:2px; right:2px; padding:0 5px; font-size:11px; line-height:16px; border-radius:99px; }
+.refs .num { position:absolute; left:2px; bottom:2px; padding:0 5px; font-size:11px; line-height:16px; border-radius:99px; background:rgba(0,0,0,.65); color:#fff; }
+.refs.each { display:block; }
+.refrow { display:flex; align-items:center; gap:8px; padding:4px 0; border-bottom:1px solid var(--line); }
+.refrow img { width:48px; height:48px; object-fit:cover; border-radius:6px; border:1px solid var(--line); flex:none; }
+.refrow .txt { flex:1; min-width:0; }
+.refrow .txt b { display:block; }
+.refrow .txt span { display:block; color:var(--mut); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.refrow .txt span.none { font-style:italic; }
+.refrow button { padding:0 6px; font-size:11px; line-height:18px; }
+.note { display:block; color:var(--mut); margin:4px 0; }
