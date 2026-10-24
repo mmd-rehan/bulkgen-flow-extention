@@ -457,15 +457,12 @@
 
   function genPopup() {
     const leaf = [...document.querySelectorAll('div,span,p')].find((e) => e.children.length <= 2 && /^Generating will use/i.test(norm(e.textContent)) && visible(e));
-    if (leaf) {
-      let p = leaf;
-      while (p && !/Ingredients|Frames/.test(p.innerText || '')) p = p.parentElement;
-      if (p) return p;
-      // models without Ingredients or Frames: the nearest box that holds the popup buttons
-      for (p = leaf.parentElement; p && p !== document.body; p = p.parentElement) if (p.querySelectorAll('button').length >= 3) return p;
-    }
-    // popup without the credit line: an open overlay with aspect or count buttons
-    return popupOverlays().find((e) => /(^|\s)(16:9|9:16|x[1-4])(\s|$)/.test(norm(e.innerText))) || null;
+    // climb to the box that also holds the Image / Video switch, so switching to Video always works
+    let p = leaf;
+    while (p && p !== document.body && !/(^|\s)Video(\s|$)/.test(norm(p.innerText))) p = p.parentElement;
+    if (p && p !== document.body) return p;
+    // popup without the credit line: an open overlay with the Video switch and aspect buttons
+    return popupOverlays().find((e) => /(^|\s)Video(\s|$)/.test(norm(e.innerText)) && /(^|\s)(16:9|9:16)(\s|$)/.test(norm(e.innerText))) || null;
   }
 
   const popupOverlays = () => [...document.querySelectorAll('.cdk-overlay-pane,[role=dialog],[role=menu],[role=listbox],[data-radix-popper-content-wrapper]')].filter(visible);
@@ -525,6 +522,17 @@
     return m ? parseInt(m[1].replace(/,/g, ''), 10) : null;
   }
 
+  // BulkGen makes videos only, so image models (Nano Banana, Imagen) never go in the list
+  const isImageModel = (name) => /nano banana|imagen/i.test(name);
+
+  // Switches the popup to Video and checks that it stuck, so the model menu lists video models
+  async function selectVideo() {
+    await popClick('Video');
+    await sleep(300);
+    const b = popButtons().find((x) => hasWord(x, 'Video'));
+    return !!b && isOnBtn(b);
+  }
+
   const cleanName = (s) => norm(s).replace(/^volume_up\s*/, '').replace(/\s*arrow_drop_down$/, '');
   const modelButton = () => popButtons().find((b) => /arrow_drop_down/.test(b.innerText));
 
@@ -574,10 +582,13 @@
       await store.set('bg_models', info);
       return Object.assign({ ok: true }, info);
     }
-    await popClick('Video');
+    if (!(await selectVideo())) {
+      await closeGenPopup();
+      return { ok: false, error: `Could not read the models.\n\nStep "Switch Flow to Video" failed: clicked Video in the generation settings but Flow stayed on Image.\n\nPage: ${pageInfo()}` };
+    }
     const startName = modelButton() ? cleanName(modelButton().innerText) : '';
     const items = await openModelMenu();
-    const names = items ? items.map((e) => cleanName(e.innerText)).filter(Boolean) : [];
+    const names = items ? items.map((e) => cleanName(e.innerText)).filter((n) => n && !isImageModel(n)) : [];
     escape();
     await sleep(400);
     const models = [];
@@ -601,7 +612,7 @@
     if (dd) {
       realClick(dd);
       const items = await waitFor(() => { const l = [...document.querySelectorAll('[role=menuitem],[role=menuitemradio],[role=option]')].filter(visible); return l.length ? l : null; }, 2500);
-      names = items ? items.map((e) => cleanName(e.innerText)).filter(Boolean) : [];
+      names = items ? items.map((e) => cleanName(e.innerText)).filter((n) => n && !isImageModel(n)) : [];
       escape();
       await sleep(400);
     }
@@ -617,7 +628,7 @@
     if (!(await setAgentMode(false))) throw stepError("Turn off Flow's Agent mode", "clicked Flow's Agent toggle but it stayed on");
     if (!(await openGenPopup())) throw stepError('Open the generation settings', genSettingsProblem());
     const notes = [];
-    await popClick('Video');
+    if (!(await selectVideo())) throw stepError('Switch Flow to Video', 'clicked Video in the generation settings but Flow stayed on Image');
     await popClick('Ingredients');
     if (cfg.model && !(await chooseModel(cfg.model))) notes.push(`model "${cfg.model}" not found`);
     const o = popOptions();
@@ -720,11 +731,10 @@
     }
   }
 
-  // Which saved images go with prompt idx: one each in upload order, or the same set (up to 3) on every prompt
+  // Image 1 goes with prompt 1, image 2 with prompt 2. Prompts past the last image get none.
   async function refsFor(cfg, idx) {
     if (!cfg.useRefs) return [];
     const refs = await store.get('bg_refs', []);
-    if (cfg.refMode === 'all') return refs.slice(0, 3);
     return refs[idx] ? [refs[idx]] : [];
   }
 
@@ -1484,7 +1494,7 @@
     if (!/^\/project\//.test(location.pathname)) return { ok: false, error: 'Open a Flow project page first.' };
     stopFlag = false; pauseFlag = false;
     run = { running: true, log: [], items: [], prompts: [], startedAt: Date.now(), step: 'Starting' };
-    await log(`Starting ${prompts.length} prompt${prompts.length > 1 ? 's' : ''} (${cfg.engine === 'agent' ? 'Flow agent' : 'plain mode'}), ${cfg.maxInFlight || 2} at once, ${cfg.model || 'current model'}, ${cfg.duration}s, download ${cfg.quality || '720p'}, cap ${cfg.maxCredits || 'none'} credits per video${cfg.useRefs ? (cfg.refMode === 'all' ? ', same reference images on every prompt' : ', one reference image per prompt in order') : ''}.`);
+    await log(`Starting ${prompts.length} prompt${prompts.length > 1 ? 's' : ''} (${cfg.engine === 'agent' ? 'Flow agent' : 'plain mode'}), ${cfg.maxInFlight || 2} at once, ${cfg.model || 'current model'}, ${cfg.duration}s, download ${cfg.quality || '720p'}, cap ${cfg.maxCredits || 'none'} credits per video${cfg.useRefs ? ', reference image N with prompt N' : ''}.`);
     await goToGrid();
     // wait until the grid has finished drawing so existing media is not mistaken for new output
     let existing = [];
