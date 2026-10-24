@@ -1,0 +1,52 @@
+# Publishes a GitHub Release with the store zip whenever main has a version that is not released yet.
+# To release: bump "version" in extension/manifest.json, commit, push.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'extension/**'
+      - 'build.sh'
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version
+        id: v
+        run: echo "version=$(jq -r .version extension/manifest.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Check if already released
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "v${{ steps.v.outputs.version }}" > /dev/null 2>&1; then
+            echo "v${{ steps.v.outputs.version }} is already released, nothing to do."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build zip
+        if: steps.check.outputs.exists == 'false'
+        run: sh build.sh
+
+      - name: Create release
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="${{ steps.v.outputs.version }}"
+          gh release create "v$v" "dist/bulkgen-flow-$v.zip" \
+            --target "$GITHUB_SHA" \
+            --title "BulkGen for Flow v$v" \
+            --generate-notes

@@ -18,8 +18,10 @@ Chrome extension that queues many video prompts in Flow (flow.google.com), keeps
 
 ## Release
 
-1. Bump `version` in `extension/manifest.json`.
-2. Run `./build.sh`.
-3. Upload `dist/bulkgen-flow-<version>.zip` in the Chrome Web Store developer dashboard.
+1. Bump `version` in `extension/manifest.json`, commit and push to `main`.
+2. GitHub Actions builds the zip and publishes it as a GitHub Release named `v<version>` (see the Releases page). Pushes that keep the same version do not create a release.
+3. Download the zip from the release (or run `./build.sh` locally) and upload it in the Chrome Web Store developer dashboard.
+
+To install without the store: download the zip from the latest release, unzip it, and load the folder with "Load unpacked" in chrome://extensions.
 
 BulkGen for Flow is an independent project and is not made, endorsed or supported by Google.
