@@ -33,6 +33,7 @@
     <div class="row gap">
       <select id="model"><option value="">Read models from Flow first</option></select>
       <button id="readModels" class="ghost" title="Ask Flow which video models are available">Refresh</button>
+      <button id="resetModels" class="ghost" title="Forget the saved models and mode, then read them from Flow again">Reset</button>
     </div>
   </section>
 
@@ -100,8 +101,8 @@
     </select>
     <div id="agentOpts" hidden>
       <label class="check"><input id="confirmNever" type="checkbox"> Turn off Flow's confirm step (set "Confirm before generating" to Never at Start). Faster, but the credit cap can no longer be checked.</label>
-      <button id="apply" class="ghost wide">Apply model, aspect and count in Flow</button>
     </div>
+    <button id="apply" class="ghost wide">Apply these settings in Flow</button>
   </section>
 
   <section class="actions">

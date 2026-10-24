@@ -1513,8 +1513,19 @@
         detachDebugger();
         return { ok: true };
       case 'bg-apply-settings': {
+        if (looping) return { ok: false, result: 'A run is going. Apply the settings when it is finished.' };
         const cfg = await store.get('bg_cfg', {});
-        const res = await applyFlowSettings({ aspect: cfg.aspect, count: cfg.count, model: cfg.model, confirmNever: !!cfg.confirmNever });
+        let res;
+        if (cfg.engine === 'agent') {
+          res = await applyFlowSettings({ aspect: cfg.aspect, count: cfg.count, model: cfg.model, confirmNever: !!cfg.confirmNever });
+        } else {
+          try {
+            const s = await applyPlainSettings(cfg);
+            res = `Flow set to ${s.model}: ${s.summary}. Flow estimates ${s.credits == null ? 'unknown' : s.credits} credits per prompt.${s.notes.length ? ' Note: ' + s.notes.join(', ') + '.' : ''}`;
+          } catch (e) {
+            res = 'Could not apply the settings: ' + e.message + (genTrigger() ? '' : '. Your Flow layout has no settings chip in the prompt box, try "Flow agent chat"');
+          }
+        }
         await log(res);
         return { ok: true, result: res };
       }

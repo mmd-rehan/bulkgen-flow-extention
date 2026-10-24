@@ -106,7 +106,7 @@ function renderModelOptions() {
   $('resolution').disabled = !res.length;
   if (m && m.aspects && m.aspects.length) fillSelect($('aspect'), m.aspects, savedCfg.aspect || '', '16:9');
   // reference images only for models that take them (plain mode)
-  const refsOk = $('engine').value !== 'agent' && (!m || m.ingredients);
+  const refsOk = $('engine').value !== 'agent' && (!m || m.ingredients || m.fromSettings);
   $('refsBox').hidden = !refsOk;
   $('refsOn').hidden = !$('useRefs').checked;
   $('agentOpts').hidden = $('engine').value !== 'agent';
@@ -334,6 +334,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   for (const f of FIELDS) $(f).addEventListener(['useRefs', 'refsRights', 'confirmNever'].includes(f) ? 'change' : 'input', saveForm);
   for (const f of ['model', 'engine', 'useRefs']) $(f).addEventListener('change', async () => { await saveForm(); renderModelOptions(); await saveForm(); });
   $('readModels').onclick = () => readModels(false);
+  // starts over when the saved models or mode no longer match Flow
+  $('resetModels').onclick = async () => {
+    await chrome.storage.local.remove('bg_models');
+    models = [];
+    savedCfg.model = '';
+    $('engine').value = 'plain';
+    renderModels();
+    await saveForm();
+    await readModels(false);
+  };
   $('refFiles').onchange = () => addRefs([...$('refFiles').files]);
   renderRefs();
   // first time: ask Flow which models exist (only if a project tab is open and nothing is running)
