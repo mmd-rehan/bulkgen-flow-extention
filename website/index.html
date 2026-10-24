@@ -49,6 +49,17 @@ html{scroll-behavior:smooth}
 a{color:#E9ECEF;text-decoration:none}
 a:hover{color:#FFFFFF}
 summary{cursor:pointer}
+.sim-row{display:flex;gap:10px;align-items:baseline;white-space:nowrap}
+.sim-row .t{overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.sim-row .s{width:14px;flex:none;text-align:center}
+.sim-row .p{flex:none;font-size:12px;color:#7A838E}
+.sim-row.done{color:#7A838E}.sim-row.done .s{color:#C8FF3D}
+.sim-row.gen{color:#E9ECEF}.sim-row.gen .s{color:#C8FF3D;animation:sim-pulse 1s ease-in-out infinite}
+.sim-row.wait{color:#5F6873}
+.sim-new{animation:sim-in .35s ease-out}
+.sim-pill.on::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:#0B0D10;margin-right:6px;vertical-align:1px;animation:sim-pulse 1s ease-in-out infinite}
+@keyframes sim-pulse{50%{opacity:.25}}
+@keyframes sim-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 </style>
 
 <script type="application/ld+json">
@@ -225,16 +236,17 @@ summary{cursor:pointer}
 <div style="width:100%;max-width:440px;box-sizing:border-box;background:#12161B;border:1px solid #232932;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:16px">
 <div style="display:flex;align-items:center;justify-content:space-between">
 <span style="font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:18px">BulkGen for Flow</span>
-<span style="font-size:13px;font-weight:500;padding:3px 12px;border-radius:99px;background:#C8FF3D;color:#0B0D10">Running</span>
+<span id="sim-pill" class="sim-pill" style="font-size:13px;font-weight:500;padding:3px 12px;border-radius:99px;background:#C8FF3D;color:#0B0D10">Running</span>
 </div>
-<div style="background:#0B0D10;border:1px solid #232932;border-radius:12px;padding:14px;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.7;color:#B6BDC6">
+<div id="sim-prompts" style="background:#0B0D10;border:1px solid #232932;border-radius:12px;padding:14px;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.7;color:#B6BDC6">
 <div>A slow orbit around Saturn and its rings</div>
 <div>An astronaut outside the space station</div>
 <div>A rocket launching into a deep blue sky</div>
 <div>The Moon rising over a crater field</div>
-<div style="color:#7A838E">+ 26 more prompts</div>
+<div id="sim-more" style="color:#7A838E">+ 26 more prompts</div>
 </div>
 <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:13px;color:#B6BDC6">
+<span style="border:1px solid #2A313B;border-radius:8px;padding:4px 10px">Omni 1.1 Flash</span>
 <span style="border:1px solid #2A313B;border-radius:8px;padding:4px 10px">6 sec</span>
 <span style="border:1px solid #2A313B;border-radius:8px;padding:4px 10px">16:9</span>
 <span style="border:1px solid #2A313B;border-radius:8px;padding:4px 10px">720p</span>
@@ -242,16 +254,16 @@ summary{cursor:pointer}
 <span style="border:1px solid #2A313B;border-radius:8px;padding:4px 10px">cap 15 credits</span>
 </div>
 <div style="display:flex;flex-direction:column;gap:8px">
-<div style="height:8px;border-radius:99px;background:#0B0D10;border:1px solid #232932;overflow:hidden"><div style="height:100%;width:40%;background:#C8FF3D"></div></div>
-<div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#9BA3AE">Queued 18 / 30 · Downloaded 12 · Failed 0</div>
+<div style="height:8px;border-radius:99px;background:#0B0D10;border:1px solid #232932;overflow:hidden"><div id="sim-bar" style="height:100%;width:40%;background:#C8FF3D;transition:width .5s ease"></div></div>
+<div id="sim-stats" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#9BA3AE">Queued 18 / 30 · Downloaded 12 · Failed 0</div>
 </div>
-<div style="background:#0B0D10;border:1px solid #232932;border-radius:12px;padding:12px 14px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.8;color:#9BA3AE">
+<div id="sim-log" style="background:#0B0D10;border:1px solid #232932;border-radius:12px;padding:12px 14px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.8;color:#9BA3AE;height:86px;overflow:hidden;box-sizing:content-box">
 <div>Queued 18 of 30 (10 credits).</div>
 <div>Saved flow_012_saturn-rings.mp4</div>
 <div>Submitting 19 of 30...</div>
 </div>
 </div>
-<p style="margin:0;font-size:13px;color:#7A838E">Illustration of the side panel. Numbers are an example.</p>
+<p style="margin:0;font-size:13px;color:#7A838E">Live simulation of the side panel. Prompts and numbers are examples.</p>
 </div>
 </section>
 
@@ -456,5 +468,122 @@ Your browser cannot play this video. <a href="/assets/bulkgen-demo.mp4">Download
 
 </div>
 
+<script>
+// Hero panel simulation: a fake run that behaves like the real side panel.
+(function () {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  var $ = function (id) { return document.getElementById(id); };
+  var pill = $('sim-pill'), box = $('sim-prompts'), more = $('sim-more'), bar = $('sim-bar'), stats = $('sim-stats'), logBox = $('sim-log');
+  if (!pill || !box || !logBox) return;
+
+  var PROMPTS = [
+    'A slow orbit around Saturn and its rings', 'An astronaut outside the space station', 'A rocket launching into a deep blue sky',
+    'The Moon rising over a crater field', 'A rover crossing red Martian dunes', 'A comet streaking past a blue planet',
+    'Northern lights seen from orbit', 'A lunar base glowing at night', 'Jupiter storms swirling in close up',
+    'A satellite unfolding its solar panels', 'A spaceship docking at a ring station', 'Stars wheeling over a desert observatory',
+    'An astronaut planting a flag on Mars', 'A nebula drifting in purple and gold', 'Earthrise over the lunar horizon',
+    'A probe diving into Saturn\'s clouds', 'A space elevator rising above clouds', 'Asteroids tumbling in slow motion',
+    'A greenhouse dome on the Moon', 'A black hole bending starlight', 'Astronauts floating in a cupola',
+    'A capsule splashing down at sunrise', 'Ice geysers on a frozen moon', 'A telescope mirror unfolding in space',
+    'A meteor shower over mountains', 'Twin suns setting on a rocky world', 'A cargo ship leaving lunar orbit',
+    'A spacewalk with Earth below', 'A ringed planet eclipsing a blue star', 'A starship jumping to light speed'
+  ];
+  var N = PROMPTS.length, AT_ONCE = 3, ROWS = 4, TICK = 450;
+  var items, next, saved, timer, finishedAt, visible = true;
+
+  var SKIP = ['a', 'an', 'the', 'of', 'at', 'in', 'on', 'its', 'and', 'over', 'past', 'from', 'to', 'with', 's'];
+  function slug(t) { return t.toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w && SKIP.indexOf(w) < 0; }).slice(0, 3).join('-'); }
+  function pad(n) { return ('00' + n).slice(-3); }
+
+  function log(text) {
+    var d = document.createElement('div');
+    d.className = 'sim-new';
+    d.textContent = text;
+    logBox.appendChild(d);
+    while (logBox.children.length > 4) logBox.removeChild(logBox.firstChild);
+  }
+
+  function setPill(text, on) {
+    pill.textContent = text;
+    pill.classList.toggle('on', on);
+    pill.style.background = on ? '#C8FF3D' : (text === 'Done' ? '#E9ECEF' : '#2A313B');
+    pill.style.color = on || text === 'Done' ? '#0B0D10' : '#B6BDC6';
+  }
+
+  function render() {
+    // show the oldest unfinished prompt with one finished row above it
+    var first = 0;
+    while (first < N && items[first].state === 'done') first++;
+    var start = Math.max(0, Math.min(first - 1, N - ROWS));
+    var html = '';
+    for (var i = start; i < start + ROWS; i++) {
+      var it = items[i];
+      var mark = it.state === 'done' ? '✓' : it.state === 'gen' ? '●' : '·';
+      var right = it.state === 'gen' ? Math.floor(it.pct) + '%' : '';
+      html += '<div class="sim-row ' + it.state + '"><span class="s">' + mark + '</span><span class="t"></span><span class="p">' + right + '</span></div>';
+    }
+    box.innerHTML = html;
+    var rows = box.querySelectorAll('.t');
+    for (var r = 0; r < rows.length; r++) rows[r].textContent = PROMPTS[start + r];
+    var left = N - (start + ROWS);
+    var m = document.createElement('div');
+    m.style.color = '#7A838E';
+    m.textContent = left > 0 ? '+ ' + left + ' more prompts' : N + ' prompts';
+    box.appendChild(m);
+    bar.style.width = (saved / N * 100) + '%';
+    stats.textContent = 'Queued ' + next + ' / ' + N + ' · Downloaded ' + saved + ' · Failed 0';
+  }
+
+  function reset() {
+    items = PROMPTS.map(function () { return { state: 'wait', pct: 0, speed: 0 }; });
+    next = 0; saved = 0; finishedAt = 0;
+    logBox.innerHTML = '';
+    setPill('Running', true);
+    log('Starting ' + N + ' prompts, ' + AT_ONCE + ' at once, Omni 1.1 Flash, 6s, cap 15 credits.');
+    render();
+  }
+
+  function tick() {
+    if (!visible) return;
+    if (finishedAt) {
+      if (Date.now() - finishedAt > 5000) reset();
+      return;
+    }
+    var inFlight = items.filter(function (x) { return x.state === 'gen'; }).length;
+    if (inFlight < AT_ONCE && next < N) {
+      var it = items[next];
+      it.state = 'gen'; it.pct = 0; it.speed = 6 + Math.random() * 9;
+      next++;
+      log('Queued ' + next + ' of ' + N + ' (10 credits).');
+    }
+    for (var i = 0; i < N; i++) {
+      var x = items[i];
+      if (x.state !== 'gen') continue;
+      x.pct += x.speed * (0.6 + Math.random() * 0.8);
+      if (x.pct >= 100) {
+        x.state = 'done';
+        saved++;
+        log('Saved flow_' + pad(i + 1) + '_' + slug(PROMPTS[i]) + '.mp4');
+      }
+    }
+    if (saved === N) {
+      setPill('Done', false);
+      log('All ' + N + ' videos saved to Downloads/BulkGen.');
+      finishedAt = Date.now();
+    }
+    render();
+  }
+
+  // only run while the panel is on screen and the tab is visible
+  var onScreen = true;
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(function (e) { onScreen = e[0].isIntersecting; visible = onScreen && !document.hidden; }).observe(box);
+  }
+  document.addEventListener('visibilitychange', function () { visible = onScreen && !document.hidden; });
+
+  reset();
+  timer = setInterval(tick, TICK);
+})();
+</script>
 </body>
 </html>
