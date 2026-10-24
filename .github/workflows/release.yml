@@ -46,7 +46,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           v="${{ steps.v.outputs.version }}"
-          gh release create "v$v" "dist/bulkgen-flow-$v.zip" \
+          # bulkgen.zip keeps the same name in every release, so the website can link to releases/latest/download/bulkgen.zip
+          cp "dist/bulkgen-flow-$v.zip" dist/bulkgen.zip
+          gh release create "v$v" "dist/bulkgen-flow-$v.zip" dist/bulkgen.zip \
             --target "$GITHUB_SHA" \
             --title "BulkGen for Flow v$v" \
             --generate-notes
