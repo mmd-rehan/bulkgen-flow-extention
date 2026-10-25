@@ -165,7 +165,7 @@
 
   // ---------- chat panel ----------
   function chatBox() {
-    const cands = document.querySelectorAll('textarea,[contenteditable="true"],[role=textbox]');
+    const cands = document.querySelectorAll('textarea,[contenteditable="true"],[contenteditable="plaintext-only"],[role=textbox],input[type=text]');
     for (const el of cands) {
       if (!visible(el)) continue;
       const hint = norm(
@@ -177,7 +177,7 @@
     // some Flow layouts word the placeholder differently: take the text field next to the settings chip
     const chip = document.querySelector('button[aria-label="Settings trigger"]');
     for (let p = chip && chip.parentElement; p && p !== document.body; p = p.parentElement) {
-      const el = [...p.querySelectorAll('textarea,[contenteditable="true"],[role=textbox]')].find(visible);
+      const el = [...p.querySelectorAll('textarea,[contenteditable="true"],[contenteditable="plaintext-only"],[role=textbox],input[type=text]')].find(visible);
       if (el) return el;
     }
     return null;
@@ -521,7 +521,8 @@
 
   const popButtons = () => { const p = genPopup(); return p ? [...p.querySelectorAll('button,[role=tab],[role=radio]')].filter(visible) : []; };
   const hasWord = (el, word) => new RegExp('(^|\\s)' + word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\s|$)', 'i').test(norm(el.innerText));
-  const isOnBtn = (b) => [b.getAttribute('aria-selected'), b.getAttribute('aria-checked'), b.getAttribute('aria-pressed')].includes('true');
+  const isOnBtn = (b) => [b.getAttribute('aria-selected'), b.getAttribute('aria-checked'), b.getAttribute('aria-pressed')].includes('true') ||
+    /^(on|checked|active|selected)$/.test(b.getAttribute('data-state') || '') || /(^|[\s_-])(selected|checked)([\s_-]|$)/i.test(b.className || '');
 
   async function popClick(word) {
     const b = popButtons().find((x) => hasWord(x, word));
@@ -541,13 +542,20 @@
 
   // Switches the popup to Video and checks that it stuck, so the model menu lists video models
   async function selectVideo() {
-    await popClick('Video');
-    await sleep(300);
+    // Flow versions mark the selected button differently, so the model shown is the real check:
+    // Veo or Omni means Video is on, Nano Banana or Imagen means Image is still on
+    const videoOn = () => {
+      const b = popButtons().find((x) => hasWord(x, 'Video'));
+      const m = modelButton();
+      if (m) return !isImageModel(cleanName(m.innerText));
+      return !b || isOnBtn(b); // no model button: trust the switch, or a popup without one is video only
+    };
     const b = popButtons().find((x) => hasWord(x, 'Video'));
-    if (b) return isOnBtn(b);
-    // a popup without the Image / Video switch is video only, unless an image model is selected
-    const m = modelButton();
-    return !(m && isImageModel(cleanName(m.innerText)));
+    if (b && !isOnBtn(b)) { realClick(b); await sleep(600); }
+    if (videoOn()) return true;
+    const again = popButtons().find((x) => hasWord(x, 'Video'));
+    if (again) { await trustedClick(again); await sleep(800); }
+    return videoOn();
   }
 
   const cleanName = (s) => norm(s).replace(/^volume_up\s*/, '').replace(/\s*arrow_drop_down$/, '');
@@ -1565,7 +1573,7 @@
   async function debugInfo() {
     const lines = ['BulkGen debug info', 'Page: ' + pageInfo(), 'Window: ' + innerWidth + 'x' + innerHeight, ''];
     lines.push('Text fields:');
-    for (const el of [...document.querySelectorAll('textarea,[contenteditable="true"],[role=textbox]')].filter(visible)) {
+    for (const el of [...document.querySelectorAll('textarea,[contenteditable="true"],[contenteditable="plaintext-only"],[role=textbox],input[type=text]')].filter(visible)) {
       lines.push(`  ${el.tagName.toLowerCase()} placeholder="${el.getAttribute('placeholder') || el.getAttribute('data-placeholder') || el.getAttribute('aria-placeholder') || ''}" label="${el.getAttribute('aria-label') || ''}"`);
     }
     lines.push('', 'Buttons:');
