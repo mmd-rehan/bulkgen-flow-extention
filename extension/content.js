@@ -462,17 +462,31 @@
     while (p && p !== document.body && !/(^|\s)Video(\s|$)/.test(norm(p.innerText))) p = p.parentElement;
     if (p && p !== document.body) return p;
     // popup without the credit line: an open overlay with the Video switch and aspect buttons
-    return popupOverlays().find((e) => /(^|\s)Video(\s|$)/.test(norm(e.innerText)) && /(^|\s)(16:9|9:16)(\s|$)/.test(norm(e.innerText))) || null;
+    const o = popupOverlays().find((e) => /(^|\s)Video(\s|$)/.test(norm(e.innerText)) && /(^|\s)(16:9|9:16)(\s|$)/.test(norm(e.innerText)));
+    if (o) return o;
+    // other Flow versions: the panel the chip says it controls, or the one that opened when it was clicked
+    const t = genTrigger();
+    const ctl = t && t.getAttribute('aria-controls') && document.getElementById(t.getAttribute('aria-controls'));
+    if (ctl && visible(ctl)) return ctl;
+    return lastPopup && lastPopup.isConnected && visible(lastPopup) ? lastPopup : null;
   }
 
-  const popupOverlays = () => [...document.querySelectorAll('.cdk-overlay-pane,[role=dialog],[role=menu],[role=listbox],[data-radix-popper-content-wrapper]')].filter(visible);
+  const popupOverlays = () => [...document.querySelectorAll('.cdk-overlay-pane,[role=dialog],[role=menu],[role=listbox],[popover],[data-radix-popper-content-wrapper]')].filter(visible);
+
+  let lastPopup = null; // the panel that appeared after the last click on the settings chip
+  function newPanel(before) {
+    const p = popupOverlays().find((e) => !before.has(e) && e.querySelectorAll('button').length >= 2);
+    if (p) lastPopup = p;
+    return p || null;
+  }
 
   async function openGenPopup() {
     if (genPopup()) return genPopup();
     if (!genTrigger()) return null;
+    const before = new Set(popupOverlays());
     realClick(genTrigger());
-    let p = await waitFor(genPopup, 2500);
-    if (!p && genTrigger()) { await trustedClick(genTrigger()); p = await waitFor(genPopup, 3000); }
+    let p = await waitFor(() => genPopup() || newPanel(before), 2500);
+    if (!p && genTrigger()) { await trustedClick(genTrigger()); p = await waitFor(() => genPopup() || newPanel(before), 3000); }
     return p;
   }
 
@@ -502,7 +516,7 @@
   function genSettingsProblem() {
     if (!genTrigger() && !chatBox()) return 'neither the prompt box nor its settings chip was found on the page';
     if (!genTrigger()) return 'the prompt box has no settings chip (the button Flow labels "Settings trigger"). This Flow layout may not have one, try "Flow agent chat" in How to drive Flow';
-    return 'the settings chip was clicked but the popup with "Generating will use N credits" did not appear (is Flow in English?)';
+    return 'the settings chip was clicked but no settings popup appeared. Please press "Copy debug info" in the panel and send the result to the developer';
   }
 
   const popButtons = () => { const p = genPopup(); return p ? [...p.querySelectorAll('button,[role=tab],[role=radio]')].filter(visible) : []; };
@@ -518,7 +532,7 @@
 
   function popCredits() {
     const p = genPopup();
-    const m = p && p.innerText.match(/Generating will use\s+([\d,]+)\s+credits?/i);
+    const m = p && (p.innerText.match(/Generating will use\s+([\d,]+)\s+credits?/i) || p.innerText.match(/([\d,]+)\s+credits?\b/i));
     return m ? parseInt(m[1].replace(/,/g, ''), 10) : null;
   }
 
@@ -530,7 +544,10 @@
     await popClick('Video');
     await sleep(300);
     const b = popButtons().find((x) => hasWord(x, 'Video'));
-    return !!b && isOnBtn(b);
+    if (b) return isOnBtn(b);
+    // a popup without the Image / Video switch is video only, unless an image model is selected
+    const m = modelButton();
+    return !(m && isImageModel(cleanName(m.innerText)));
   }
 
   const cleanName = (s) => norm(s).replace(/^volume_up\s*/, '').replace(/\s*arrow_drop_down$/, '');
@@ -1527,6 +1544,7 @@
       run.costPer = s1.credits || 0;
       run.summary = s1.summary;
       const perVideo = s1.credits ? Math.round(s1.credits / count) : 0;
+      if (s1.credits == null && parseInt(cfg.maxCredits, 10)) await log('Flow did not show a credit estimate, so the credit cap cannot be checked before sending.', 'warn');
       await log(`Flow set to ${s1.model}: ${s1.summary}. Flow estimates ${s1.credits == null ? 'unknown' : s1.credits} credits per prompt.${s1.notes.length ? ' Note: ' + s1.notes.join(', ') + '.' : ''}`);
       const cap = parseInt(cfg.maxCredits, 10) || 0;
       if (cap && perVideo > cap) {
@@ -1559,6 +1577,7 @@
     if (!trigger) {
       lines.push('  no settings chip');
     } else {
+      lines.push(`  chip: text="${short(trigger.innerText, 60)}" aria-expanded=${trigger.getAttribute('aria-expanded')} aria-controls=${trigger.getAttribute('aria-controls')} aria-haspopup=${trigger.getAttribute('aria-haspopup')}`);
       const wasOpen = !!genPopup();
       if (!wasOpen) { realClick(trigger); await sleep(1500); }
       lines.push('  detected by BulkGen: ' + (genPopup() ? 'yes' : 'no'));
