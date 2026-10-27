@@ -1571,10 +1571,10 @@
     let prompts = (cfg.prompts || []).filter((p) => p && p.trim());
     if (limit) prompts = prompts.slice(0, limit);
     if (!prompts.length) return { ok: false, error: 'Add at least one prompt.' };
-    if (!/^\/project\//.test(location.pathname)) return { ok: false, error: 'Open a Flow project page first.' };
+    if (!/^(\/u\/\d+)?\/project\//.test(location.pathname)) return { ok: false, error: 'Open a Flow project page first.' };
     stopFlag = false; pauseFlag = false;
     run = { running: true, log: [], items: [], prompts: [], startedAt: Date.now(), step: 'Starting' };
-    await log(`Starting ${prompts.length} prompt${prompts.length > 1 ? 's' : ''} (${cfg.engine === 'agent' ? 'Flow agent' : 'plain mode'}), ${cfg.maxInFlight || 2} at once, ${cfg.model || 'current model'}, ${cfg.duration}s, download ${cfg.quality || '720p'}, cap ${cfg.maxCredits || 'none'} credits per video${cfg.useRefs ? ', reference image N with prompt N' : ''}.`);
+    await log(`Starting ${prompts.length} prompt${prompts.length > 1 ? 's' : ''} (${cfg.engine === 'agent' ? 'Flow agent' : 'plain mode'}), ${cfg.maxInFlight || 2} at once, ${cfg.model || 'current model'}, ${cfg.duration}s, cap ${cfg.maxCredits || 'none'} credits per video${cfg.useRefs ? ', reference image N with prompt N' : ''}.`);
     await goToGrid();
     // wait until the grid has finished drawing so existing media is not mistaken for new output
     let existing = [];
@@ -1585,7 +1585,7 @@
       stable = keys.length === existing.length ? stable + 1 : 0;
       existing = keys;
     }
-    const pm = location.pathname.match(/^\/project\/[0-9a-f-]+/i);
+    const pm = location.pathname.match(/^(\/u\/\d+)?\/project\/[0-9a-f-]+/i);
     const count = Math.max(1, parseInt(cfg.count, 10) || 1);
     Object.assign(run, {
       finished: false, paused: false, prompts, next: 0, failed: 0, credits: 0,
@@ -1666,7 +1666,7 @@
       case 'bg-download-all':
         if (looping) return { ok: false, error: 'A run is going. Download the videos when it is finished, or Stop it first.' };
         if (downloadingAll) return { ok: false, error: 'Already downloading the project videos.' };
-        if (!/^\/project\//.test(location.pathname)) return { ok: false, error: 'Open a Flow project page first.' };
+        if (!/^(\/u\/\d+)?\/project\//.test(location.pathname)) return { ok: false, error: 'Open a Flow project page first.' };
         downloadAll(); // runs on its own; progress shows in the log
         return { ok: true };
       case 'bg-read-models':
@@ -1722,7 +1722,7 @@
     });
     // remember the project page so the side panel can send you back to it
     const rememberProject = () => {
-      const m = location.pathname.match(/^\/project\/[0-9a-f-]+/i);
+      const m = location.pathname.match(/^(\/u\/\d+)?\/project\/[0-9a-f-]+/i);
       if (m) store.set('bg_lastProject', location.origin + m[0]);
     };
     rememberProject();

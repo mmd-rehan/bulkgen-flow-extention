@@ -277,7 +277,7 @@ async function getFlowProjectTab() {
     await chrome.tabs.update(tab.id, { url: bg_lastProject, active: true });
     await waitForLoad(tab.id);
   } else {
-    const m = new URL(tab.url).pathname.match(/^\/project\/[0-9a-f-]+/i);
+    const m = new URL(tab.url).pathname.match(/^(\/u\/\d+)?\/project\/[0-9a-f-]+/i);
     if (m) await chrome.storage.local.set({ bg_lastProject: new URL(tab.url).origin + m[0] });
   }
   return tab;
