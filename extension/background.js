@@ -1,5 +1,43 @@
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {});
+  setupPanels();
+});
+chrome.runtime.onStartup.addListener(setupPanels);
+
+// ---- side panel only on Flow tabs ----
+// The panel is off by default and turned on per Flow tab, so it hides on other tabs and shows again
+// when the user comes back to Flow. Other tabs report no URL to us (no "tabs" permission), so they stay off.
+const isFlowUrl = (u) => /^https:\/\/(flow\.google\.com|labs\.google\/fx)\//.test(u || '');
+
+function panelForTab(tabId, url) {
+  const opts = isFlowUrl(url) ? { tabId, path: 'sidepanel.html', enabled: true } : { tabId, enabled: false };
+  return chrome.sidePanel.setOptions(opts).catch(() => {});
+}
+
+async function setupPanels() {
+  await chrome.sidePanel.setOptions({ enabled: false }).catch(() => {});
+  const tabs = await chrome.tabs.query({ url: ['https://flow.google.com/*', 'https://labs.google/fx/*'] }).catch(() => []);
+  for (const t of tabs) panelForTab(t.id, t.url);
+}
+
+// Toolbar icon: opens the panel on a Flow tab, and opens Flow on any other tab (the panel is hidden there)
+chrome.action.onClicked.addListener((tab) => {
+  if (isFlowUrl(tab.url)) {
+    chrome.sidePanel.setOptions({ tabId: tab.id, path: 'sidepanel.html', enabled: true }).catch(() => {});
+    chrome.sidePanel.open({ tabId: tab.id }).catch(() => {});
+  } else {
+    chrome.tabs.create({ url: 'https://flow.google.com/' });
+  }
+});
+
+chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
+  if (!info.url && info.status !== 'loading') return;
+  const wasFlow = isFlowUrl(tab.url);
+  panelForTab(tabId, tab.url).then(() => {
+    // Chrome only opens a side panel after a click, so this works when the user clicked a link to Flow
+    // and is quietly refused otherwise. Once opened on a Flow tab, it stays open there.
+    if (wasFlow && info.url) chrome.sidePanel.open({ tabId }).catch(() => {});
+  });
 });
 
 // ---- trusted clicks (Flow ignores scripted clicks on the Start button) ----

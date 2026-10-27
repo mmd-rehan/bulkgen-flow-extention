@@ -4,7 +4,7 @@
 BulkGen for Flow
 
 ## Summary (132 characters max)
-Queue many video prompts in Flow at once. Keeps the queue full and saves every finished video to Downloads automatically.
+Queue many video prompts in Flow at once. Keeps the queue full, then downloads every video of the project in one click.
 
 ## Category
 Productivity (Tools also fits)
@@ -13,7 +13,7 @@ Productivity (Tools also fits)
 English
 
 ## Description
-BulkGen turns Flow into a batch video maker. Paste all your prompts once, pick your settings, click Start, and walk away. BulkGen sends the prompts one after another, keeps Flow's queue full, and saves each finished video to your Downloads folder with a clear name.
+BulkGen turns Flow into a batch video maker. Paste all your prompts once, pick your settings, click Start, and walk away. BulkGen sends the prompts one after another, keeps Flow's queue full, and tells you when each video is ready. One click on "Download all videos of this project" then saves them to your Downloads folder with clear names.
 
 Free and open source (MIT license).
 
@@ -23,8 +23,10 @@ WHAT IT DOES
 - Reads the video models Flow offers and sets the one you pick; seconds, resolution and aspect follow that model
 - Optional reference images (Ingredients) for models that accept them, matched in order: image 1 goes with prompt 1, image 2 with prompt 2. Any number of images; prompts past the last image go without one
 - Keeps up to your "At once" number of videos generating at the same time
+- Nothing downloads until you click "Download all videos of this project"
 - Saves files as Downloads/BulkGen/flow_001_title.mp4, numbered in prompt order even when videos finish out of order
-- Downloads in 720p original or 1080p upscaled
+- Downloads in 720p original or 1080p upscaled, and skips videos saved earlier
+- The side panel shows only on Flow tabs and hides on other tabs
 - Checks Flow's own credit estimate before sending and sends nothing if a video would cost more than your limit
 - Pause, Resume and Stop at any time; if the page reloads, the run picks up where it left off
 - Retries failed downloads and tells you clearly when it gives up
@@ -55,7 +57,7 @@ https://bulkgen.mmd-rehan.com
 https://github.com/mmd-rehan/bulkgen-flow-extention/issues
 
 ## Single purpose (Privacy practices tab)
-Automates sending a list of video prompts to the Flow website the user has open and downloads the resulting videos to the user's computer.
+Automates sending a list of video prompts to the Flow website the user has open and, when the user clicks the download button, downloads the project's videos to the user's computer.
 
 ## Permission justifications (Privacy practices tab)
 
@@ -63,7 +65,7 @@ debugger:
 Flow ignores clicks sent by scripts on its generate and download buttons. BulkGen attaches the debugger only to the user's own Flow tab during a run and sends only mouse click events (Input.dispatchMouseEvent) at the button's position. It reads nothing through the debugger and detaches when the run ends.
 
 downloads:
-Saves each finished video into a BulkGen folder in Downloads with a name based on the prompt order and title, and tracks whether each download completed so it can retry. Also used for the "Export log" button, and to save the debug info as a file when the clipboard is not available.
+When the user clicks "Download all videos of this project", saves each video into a BulkGen folder in Downloads with a name based on the prompt order and title, and tracks whether each download completed so it can retry. Also used for the "Export log" button, and to save the debug info as a file when the clipboard is not available.
 
 storage:
 Keeps the user's prompts, settings, run progress and log on the device so a run survives a page reload or browser restart.

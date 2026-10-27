@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BulkGen: Bulk Video Generator for Google Flow</title>
-<meta name="description" content="Free, open source Chrome extension that queues dozens of video prompts in Google Flow, keeps the queue full and downloads every finished video for you.">
+<meta name="description" content="Free, open source Chrome extension that queues dozens of video prompts in Google Flow, keeps the queue full and downloads every finished video with one click.">
 <link rel="canonical" href="https://bulkgen.mmd-rehan.com/">
 <meta name="robots" content="index, follow, max-image-preview:large">
 <meta name="author" content="Muhammad Rehan">
@@ -22,7 +22,7 @@
 <meta property="og:locale" content="en_US">
 <meta property="og:url" content="https://bulkgen.mmd-rehan.com/">
 <meta property="og:title" content="BulkGen: Bulk Video Generator for Google Flow">
-<meta property="og:description" content="Free, open source Chrome extension that queues dozens of video prompts in Google Flow, keeps the queue full and downloads every finished video for you.">
+<meta property="og:description" content="Free, open source Chrome extension that queues dozens of video prompts in Google Flow, keeps the queue full and downloads every finished video with one click.">
 <meta property="og:image" content="https://bulkgen.mmd-rehan.com/assets/og-image.png">
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
@@ -36,7 +36,7 @@
 
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="BulkGen: Bulk Video Generator for Google Flow">
-<meta name="twitter:description" content="Free, open source Chrome extension that queues dozens of video prompts in Google Flow, keeps the queue full and downloads every finished video for you.">
+<meta name="twitter:description" content="Free, open source Chrome extension that queues dozens of video prompts in Google Flow, keeps the queue full and downloads every finished video with one click.">
 <meta name="twitter:image" content="https://bulkgen.mmd-rehan.com/assets/og-image.png">
 <meta name="twitter:image:alt" content="BulkGen for Flow: paste your prompts once and get every video">
 
@@ -72,7 +72,7 @@ summary{cursor:pointer}
    "url": "https://bulkgen.mmd-rehan.com/",
    "name": "BulkGen",
    "alternateName": "BulkGen for Flow",
-   "description": "Free, open source Chrome extension that queues dozens of video prompts in Google Flow, keeps the queue full and downloads every finished video for you.",
+   "description": "Free, open source Chrome extension that queues dozens of video prompts in Google Flow, keeps the queue full and downloads every finished video with one click.",
    "inLanguage": "en",
    "publisher": {
     "@id": "https://www.mmd-rehan.com/#person"
@@ -83,7 +83,7 @@ summary{cursor:pointer}
    "@id": "https://bulkgen.mmd-rehan.com/#webpage",
    "url": "https://bulkgen.mmd-rehan.com/",
    "name": "BulkGen: Bulk Video Generator for Google Flow",
-   "description": "Free, open source Chrome extension that queues dozens of video prompts in Google Flow, keeps the queue full and downloads every finished video for you.",
+   "description": "Free, open source Chrome extension that queues dozens of video prompts in Google Flow, keeps the queue full and downloads every finished video with one click.",
    "isPartOf": {
     "@id": "https://bulkgen.mmd-rehan.com/#website"
    },
@@ -121,7 +121,7 @@ summary{cursor:pointer}
    "@id": "https://bulkgen.mmd-rehan.com/#software",
    "name": "BulkGen for Flow",
    "alternateName": "BulkGen",
-   "description": "Chrome extension that sends a list of video prompts to Google Flow, keeps up to your chosen number generating at once, and saves every finished video to your Downloads folder with clear numbered names.",
+   "description": "Chrome extension that sends a list of video prompts to Google Flow, keeps up to your chosen number generating at once, and downloads every finished video of the project with one click, with clear numbered names.",
    "url": "https://bulkgen.mmd-rehan.com/",
    "image": "https://bulkgen.mmd-rehan.com/assets/icon-512.png",
    "screenshot": "https://bulkgen.mmd-rehan.com/assets/og-image.png",
@@ -141,7 +141,7 @@ summary{cursor:pointer}
    "featureList": [
     "Queue many video prompts at once",
     "Keeps the Flow queue full",
-    "Automatic video downloads with numbered names",
+    "One click download of every project video, with numbered names",
     "Model selection read from Flow",
     "Reference images (Ingredients), one per prompt in order",
     "Credit cap per video",
@@ -255,11 +255,11 @@ summary{cursor:pointer}
 </div>
 <div style="display:flex;flex-direction:column;gap:8px">
 <div style="height:8px;border-radius:99px;background:#0B0D10;border:1px solid #232932;overflow:hidden"><div id="sim-bar" style="height:100%;width:40%;background:#C8FF3D;transition:width .5s ease"></div></div>
-<div id="sim-stats" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#9BA3AE">Queued 18 / 30 · Downloaded 12 · Failed 0</div>
+<div id="sim-stats" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#9BA3AE">Queued 18 / 30 · Ready 12 · Failed 0</div>
 </div>
 <div id="sim-log" style="background:#0B0D10;border:1px solid #232932;border-radius:12px;padding:12px 14px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.8;color:#9BA3AE;height:86px;overflow:hidden;box-sizing:content-box">
 <div>Queued 18 of 30 (10 credits).</div>
-<div>Saved flow_012_saturn-rings.mp4</div>
+<div>Prompt 12 ready in Flow.</div>
 <div>Submitting 19 of 30...</div>
 </div>
 </div>
@@ -297,7 +297,7 @@ Your browser cannot play this video. <a href="/assets/bulkgen-demo.mp4">Download
 <div style="flex:1 1 300px;min-width:0;background:#12161B;border:1px solid #232932;border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:12px">
 <div style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#C8FF3D">03</div>
 <h3 style="margin:0;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:22px">Press Start</h3>
-<p style="margin:0;color:#B6BDC6;font-size:16px">It sends each prompt, waits for the render, and saves the video to your Downloads folder. Then it moves to the next one.</p>
+<p style="margin:0;color:#B6BDC6;font-size:16px">It sends each prompt, keeps your chosen number rendering at once, and marks each video ready. One click then downloads them all.</p>
 </div>
 </div>
 </div>
@@ -331,8 +331,8 @@ Your browser cannot play this video. <a href="/assets/bulkgen-demo.mp4">Download
 
 <div style="flex:1 1 320px;min-width:0;border:1px solid #232932;border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:12px">
 <div style="color:#C8FF3D"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"></path></svg></div>
-<h3 style="margin:0;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:21px">Automatic downloads</h3>
-<p style="margin:0;color:#B6BDC6;font-size:16px">Saves each finished video as 720p original or 1080p upscaled into a BulkGen folder, numbered in prompt order like flow_001_title.mp4.</p>
+<h3 style="margin:0;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:21px">One click downloads</h3>
+<p style="margin:0;color:#B6BDC6;font-size:16px">Nothing downloads until you click. Then every video of the project is saved as 720p original or 1080p upscaled into a BulkGen folder, numbered in prompt order like flow_001_title.mp4.</p>
 </div>
 
 <div style="flex:1 1 320px;min-width:0;border:1px solid #232932;border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:12px">
@@ -493,7 +493,6 @@ Your browser cannot play this video. <a href="/assets/bulkgen-demo.mp4">Download
 
   var SKIP = ['a', 'an', 'the', 'of', 'at', 'in', 'on', 'its', 'and', 'over', 'past', 'from', 'to', 'with', 's'];
   function slug(t) { return t.toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w && SKIP.indexOf(w) < 0; }).slice(0, 3).join('-'); }
-  function pad(n) { return ('00' + n).slice(-3); }
 
   function log(text) {
     var d = document.createElement('div');
@@ -531,7 +530,7 @@ Your browser cannot play this video. <a href="/assets/bulkgen-demo.mp4">Download
     m.textContent = left > 0 ? '+ ' + left + ' more prompts' : N + ' prompts';
     box.appendChild(m);
     bar.style.width = (saved / N * 100) + '%';
-    stats.textContent = 'Queued ' + next + ' / ' + N + ' · Downloaded ' + saved + ' · Failed 0';
+    stats.textContent = 'Queued ' + next + ' / ' + N + ' · Ready ' + saved + ' · Failed 0';
   }
 
   function reset() {
@@ -563,12 +562,12 @@ Your browser cannot play this video. <a href="/assets/bulkgen-demo.mp4">Download
       if (x.pct >= 100) {
         x.state = 'done';
         saved++;
-        log('Saved flow_' + pad(i + 1) + '_' + slug(PROMPTS[i]) + '.mp4');
+        log('Prompt ' + (i + 1) + ' ready in Flow.');
       }
     }
     if (saved === N) {
       setPill('Done', false);
-      log('All ' + N + ' videos saved to Downloads/BulkGen.');
+      log('All ' + N + ' videos ready. Download all saves them as flow_001_' + slug(PROMPTS[0]) + '.mp4 and on.');
       finishedAt = Date.now();
     }
     render();

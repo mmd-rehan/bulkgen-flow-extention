@@ -5,7 +5,7 @@
 <h1 align="center">BulkGen for Flow</h1>
 
 <p align="center">
-  Free, open source Chrome extension that queues dozens of video prompts in Google Flow, keeps the queue full and saves every finished video to your Downloads folder.
+  Free, open source Chrome extension that queues dozens of video prompts in Google Flow, keeps the queue full and downloads every finished video of the project with one click.
 </p>
 
 <p align="center">
@@ -24,13 +24,14 @@
 
 ## What it does
 
-Paste your prompts once, pick the model and settings, and press Start. BulkGen sends the prompts one after another, keeps up to your chosen number generating at once, and saves each finished video as `Downloads/BulkGen/flow_001_title.mp4`, numbered in prompt order.
+Paste your prompts once, pick the model and settings, and press Start. BulkGen sends the prompts one after another, keeps up to your chosen number generating at once, and notes each video as ready when Flow finishes it. When you are ready, click "Download all videos of this project" to save them as `Downloads/BulkGen/flow_001_title.mp4`, numbered in prompt order. Nothing downloads before that click.
 
 - Character and world notes plus a style line added to every prompt
 - Reads the video models Flow offers; seconds, resolution and aspect follow the model
 - Optional reference images (Ingredients), matched in order: image 1 goes with prompt 1, image 2 with prompt 2, and so on
 - Checks Flow's credit estimate before sending and sends nothing above your per-video limit
-- Downloads in 720p original or 1080p upscaled, with retries
+- One click downloads every video of the project in 720p original or 1080p upscaled, with retries, and skips videos saved earlier
+- The side panel shows only on Flow tabs
 - Pause, Resume and Stop; a page reload resumes the run
 - Step by step error messages and a "Copy debug info" button for bug reports
 - No servers, no analytics, no data collection

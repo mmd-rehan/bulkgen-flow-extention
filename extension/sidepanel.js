@@ -284,7 +284,7 @@ async function getFlowProjectTab() {
 }
 
 async function send(type, extra, quiet) {
-  const redirect = type === 'bg-start' || type === 'bg-apply-settings' || (type === 'bg-read-models' && !quiet);
+  const redirect = type === 'bg-start' || type === 'bg-apply-settings' || type === 'bg-download-all' || (type === 'bg-read-models' && !quiet);
   const tab = redirect ? await getFlowProjectTab() : await flowTab();
   if (!tab) { if (!redirect && !quiet) alert('Open your Google Flow project tab first (flow.google.com), then try again.'); return null; }
   if (!(await ensureScript(tab.id))) {
@@ -306,22 +306,26 @@ function render(run) {
   const el = $('status');
   if (!run) { el.textContent = 'Idle'; el.className = 'pill idle'; return; }
   const total = run.prompts ? run.prompts.length : 0;
-  if (run.running && run.paused) { el.textContent = 'Paused'; el.className = 'pill pause'; }
+  const dl = run.dl && run.dl.running ? run.dl : null;
+  if (dl) { el.textContent = 'Downloading'; el.className = 'pill run'; }
+  else if (run.running && run.paused) { el.textContent = 'Paused'; el.className = 'pill pause'; }
   else if (run.running) { el.textContent = 'Running'; el.className = 'pill run'; }
   else if (run.finished) { el.textContent = 'Finished'; el.className = 'pill idle'; }
   else { el.textContent = 'Stopped'; el.className = 'pill idle'; }
   const items = run.items || [];
   const generating = items.filter((it) => it.status === 'queued').length;
-  const downloading = items.filter((it) => it.status === 'downloading').length;
-  $('stats').textContent = `Queued ${run.next || 0} / ${total} · Generating ${generating} · Downloading ${downloading} · Downloaded ${run.downloaded || 0} · Failed ${run.failed || 0}` + (run.credits ? ` · ${run.credits} credits` : '');
-  $('step').textContent = run.running ? 'Now: ' + (run.step || '') : '';
+  $('stats').textContent = dl
+    ? `Downloading ${dl.total} videos · Saved ${dl.saved} · Skipped ${dl.skipped} · Failed ${dl.failed}`
+    : `Queued ${run.next || 0} / ${total} · Generating ${generating} · Ready ${run.ready || 0} · Failed ${run.failed || 0}` + (run.credits ? ` · ${run.credits} credits` : '');
+  $('step').textContent = run.running || dl ? 'Now: ' + (run.step || '') : '';
   let stuck = run.stuck || '';
   if (run.running && !run.paused && run.beat && Date.now() - run.beat > 90000) {
     stuck = 'The Flow tab has not reported anything for ' + Math.round((Date.now() - run.beat) / 60000) + ' min. Make sure the Flow tab is open (not discarded), then click Resume.';
   }
   $('stuck').hidden = !stuck;
   $('stuck').textContent = stuck;
-  const pct = total ? Math.round(((run.downloaded || 0) + (run.failed || 0)) / total * 100) : 0;
+  const pct = dl ? (dl.total ? Math.round((dl.saved + dl.skipped + dl.failed) / dl.total * 100) : 0)
+    : (total ? Math.round(((run.ready || 0) + (run.failed || 0)) / total * 100) : 0);
   $('barfill').style.width = pct + '%';
   const log = $('log');
   log.innerHTML = '';
@@ -401,6 +405,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('pause').onclick = () => send('bg-pause');
   $('resume').onclick = () => send('bg-resume');
   $('stop').onclick = () => send('bg-stop');
+  $('downloadAll').onclick = async () => {
+    await saveForm();
+    const res = await send('bg-download-all');
+    if (res && !res.ok) alert(res.error);
+  };
   $('apply').onclick = async () => { await saveForm(); const r = await send('bg-apply-settings'); if (r && r.result) alert(r.result); };
 
   chrome.storage.onChanged.addListener((ch, area) => {

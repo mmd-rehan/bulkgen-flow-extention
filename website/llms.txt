@@ -1,6 +1,6 @@
 # BulkGen for Flow
 
-> BulkGen is a free, open source (MIT) Chrome extension for Google Flow (flow.google.com). You paste a list of video prompts once, pick the model and settings, and press Start. BulkGen sends the prompts one after another, keeps up to your chosen number of videos generating at once, and saves every finished video to Downloads/BulkGen with numbered names such as flow_001_title.mp4.
+> BulkGen is a free, open source (MIT) Chrome extension for Google Flow (flow.google.com). You paste a list of video prompts once, pick the model and settings, and press Start. BulkGen sends the prompts one after another, keeps up to your chosen number of videos generating at once, and tells you when each video is ready. One click on "Download all videos of this project" saves them to Downloads/BulkGen with numbered names such as flow_001_title.mp4.
 
 BulkGen is built and maintained by Muhammad Rehan, a full-stack developer in Dubai: https://www.mmd-rehan.com/
 

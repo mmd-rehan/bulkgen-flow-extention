@@ -379,6 +379,20 @@
     await waitFor(chatBox, 8000);
   }
 
+  // Some Flow accounts show the prompt box inside the agent panel on the right side. Its settings
+  // popup does not offer the video models, so close that panel: the prompt box then sits at the bottom.
+  const inSidePanel = () => { const b = chatBox(); return !!(b && b.closest('flow-agent-panel')); };
+  async function promptBoxToBottom() {
+    if (!inSidePanel()) return true;
+    const close = () => document.querySelector('flow-agent-panel .agent-panel-header button[aria-label="Close"]');
+    if (!close()) { await log('The prompt box is in Flow\'s side panel and its Close button was not found.', 'warn'); return false; }
+    realClick(close());
+    let ok = await waitFor(() => !inSidePanel() && chatBox(), 3000);
+    if (!ok && close()) { await trustedClick(close()); ok = await waitFor(() => !inSidePanel() && chatBox(), 4000); }
+    await log(ok ? 'Moved Flow\'s prompt box from the side panel to the bottom of the page.' : 'Could not move Flow\'s prompt box out of the side panel.', ok ? 'info' : 'warn');
+    return !!ok;
+  }
+
   // ---------- Flow agent settings ----------
   function settingsPanel() {
     const h = [...document.querySelectorAll('div,span,h2,h3,label')].find((e) => e.children.length === 0 && norm(e.textContent) === 'Confirm before generating');
@@ -503,7 +517,7 @@
       'v' + chrome.runtime.getManifest().version,
       'page ' + location.pathname.replace(/[0-9a-f-]{36}/gi, 'ID'),
       'language ' + (document.documentElement.lang || 'unknown'),
-      'prompt box ' + (chatBox() ? 'found' : 'missing'),
+      'prompt box ' + (chatBox() ? (inSidePanel() ? 'in side panel' : 'at bottom') : 'missing'),
       'Agent toggle ' + (chip ? (chip.getAttribute('aria-pressed') === 'true' ? 'on' : 'off') : 'missing'),
       'settings chip ' + (genTrigger() ? 'found' : 'missing'),
       'settings popup ' + (genPopup() ? 'open' : 'closed')
@@ -598,6 +612,7 @@
   // Reads the video models Flow offers (and what each one supports) for the side panel
   async function readModels() {
     await goToGrid();
+    await promptBoxToBottom();
     const agentOff = await setAgentMode(false);
     if (!agentOff || !(await openGenPopup())) {
       const why = agentOff ? genSettingsProblem() : 'clicked Flow\'s Agent toggle but it stayed on';
@@ -650,6 +665,7 @@
 
   async function applyPlainSettings(cfg) {
     await goToGrid();
+    await promptBoxToBottom();
     if (!(await setAgentMode(false))) throw stepError("Turn off Flow's Agent mode", "clicked Flow's Agent toggle but it stayed on");
     if (!(await openGenPopup())) throw stepError('Open the generation settings', genSettingsProblem());
     const notes = [];
@@ -823,6 +839,7 @@
     const p = run.prompts[idx];
     item.text = buildPlainPrompt(cfg, p);
     await goToGrid();
+    await promptBoxToBottom();
     if (!(await setAgentMode(false))) throw stepError("Turn off Flow's Agent mode", "clicked Flow's Agent toggle but it stayed on");
     const box = await waitFor(chatBox, 8000);
     if (!box) throw stepError('Find the prompt box', 'no prompt box on the page after 8 seconds. Is the Flow project page open?');
@@ -1088,8 +1105,8 @@
   }
 
   function waitingFor(it, i) {
-    if (!['queued', 'sent', 'downloading'].includes(it.status) && !(['failed', 'skipped'].includes(it.status) && it.lateOk)) return false;
-    return (it.files || []).length + Object.values(run.downloads || {}).filter((d) => d.idx === i).length < (it.count || 1);
+    if (!['queued', 'sent'].includes(it.status) && !(['failed', 'skipped'].includes(it.status) && it.lateOk)) return false;
+    return (it.ready || 0) < (it.count || 1);
   }
 
   const keywords = (s) => (s.toLowerCase().match(/[a-z0-9]+/g) || []).filter((w) => w.length > 2 && !/^(the|and|with|for|from|into|over|under|its|this|that|style|video|generate|make|second|clip|cinematic|realistic)$/.test(w));
@@ -1186,117 +1203,28 @@
       await log(`Skipped "${short(t.title, 40)}": it does not match any waiting prompt of this run.`);
       return;
     }
+    await markReady(idx, editId);
+  }
+
+  // A run does not download: it notes that the video for prompt idx is ready in Flow.
+  // The "Download all videos of this project" button saves them.
+  async function markReady(idx, editId) {
     const item = run.items[idx];
     if (item.status === 'failed' || item.status === 'skipped') {
       // Flow made it after all: count it as a success instead
       run.failed = Math.max(0, run.failed - 1);
       item.lateOk = false;
-      await log(`Prompt ${idx + 1} arrived late after being marked ${item.status}, downloading it anyway.`, 'warn');
+      await log(`Prompt ${idx + 1} arrived late after being marked ${item.status}, counting it as ready.`, 'warn');
     }
-    const title = openedTitle() || t.title || run.prompts[idx];
-    const nth = (item.files || []).length + Object.values(run.downloads).filter((d) => d.idx === idx).length;
-    const name = `${cfg.prefix || 'flow'}_${String(idx + 1).padStart(3, '0')}${nth ? '_' + (nth + 1) : ''}_${slug(title)}.mp4`;
-    await setStep(`Downloading video for prompt ${idx + 1}`);
-    const how = await startDownload(name, title, cfg.quality);
-    const prev = run.dlTries[editId] || 0;
-    if (how) {
-      run.doneEdits.push(editId);
-      run.downloads[name] = { idx, editId, tileKey: t.key, title, startedAt: Date.now(), quality: cfg.quality };
-      item.status = 'downloading';
-      progress();
-      await log(`Prompt ${idx + 1} finished${item.queuedAt ? ' after ' + Math.round((Date.now() - item.queuedAt) / 60000 * 10) / 10 + ' min' : ''}. ${how === 'upscaling' ? 'Flow is upscaling to 1080p, the file will arrive later' : 'Download started'}: ${name}`);
-    } else {
-      run.dlTries[editId] = prev + 1;
-      await failDownloadTry(cfg, idx, editId, t.key, title, 'the Download media menu did not start a download');
-      if (!run.blockHint) {
-        run.blockHint = true;
-        await log('If no file appears at all: Chrome may be blocking repeated downloads from flow.google.com. Click the download icon with a red mark in the address bar and choose Allow (or allow flow.google.com in chrome://settings/content/automaticDownloads).', 'warn');
-      }
-    }
+    run.doneEdits.push(editId);
+    item.ready = (item.ready || 0) + 1;
+    if (item.ready >= (item.count || 1)) { item.status = 'done'; item.doneAt = Date.now(); }
+    run.ready = (run.ready || 0) + 1;
+    progress();
+    await log(`Prompt ${idx + 1} finished${item.queuedAt ? ' after ' + Math.round((Date.now() - item.queuedAt) / 60000 * 10) / 10 + ' min' : ''}. The video is ready in Flow.`);
   }
 
-  // 720p straight from the grid row's Download button, no need to open the video
-  async function downloadFromRow(cfg, t, idx) {
-    run.seen.push(t.key);
-    const item = run.items[idx];
-    const id = 'row:' + t.key;
-    if (item.status === 'failed' || item.status === 'skipped') {
-      run.failed = Math.max(0, run.failed - 1);
-      item.lateOk = false;
-      await log(`Prompt ${idx + 1} arrived late after being marked ${item.status}, downloading it anyway.`, 'warn');
-    }
-    const title = t.title || run.prompts[idx];
-    const name = `${cfg.prefix || 'flow'}_${String(idx + 1).padStart(3, '0')}_${slug(title)}.mp4`;
-    await setStep(`Downloading video for prompt ${idx + 1}`);
-    await sendBg({ type: 'bulkgen-expect-download', filename: name, title, waitMs: 4 * 60000 });
-    await trustedClick(t.rowDownload);
-    let started = false;
-    const end = Date.now() + 20000;
-    while (Date.now() < end && !stopFlag) {
-      const s = await dlState(name);
-      if (s && (s.state === 'in_progress' || s.state === 'complete')) { started = true; break; }
-      await sleep(500);
-    }
-    if (started) {
-      run.doneEdits.push(id);
-      run.downloads[name] = { idx, editId: id, tileKey: t.key, title, startedAt: Date.now(), quality: '720p' };
-      item.status = 'downloading';
-      progress();
-      await log(`Prompt ${idx + 1} finished${item.queuedAt ? ' after ' + Math.round((Date.now() - item.queuedAt) / 60000 * 10) / 10 + ' min' : ''}. Download started: ${name}`);
-    } else {
-      run.dlTries[id] = (run.dlTries[id] || 0) + 1;
-      await failDownloadTry(cfg, idx, id, t.key, title, 'the Download button did not start a download');
-    }
-  }
-
-  async function failDownloadTry(cfg, idx, editId, tileKey, title, why) {
-    const maxTries = Math.max(1, parseInt(cfg.downloadRetries, 10) || 3);
-    const tries = run.dlTries[editId] || 1;
-    const item = run.items[idx];
-    if (tries >= maxTries) {
-      if (!run.doneEdits.includes(editId)) run.doneEdits.push(editId);
-      item.status = 'failed';
-      item.note = 'download failed';
-      item.lateOk = false;
-      run.failed += 1;
-      progress();
-      await log(`Gave up downloading prompt ${idx + 1} ("${short(title, 40)}") after ${maxTries} tries: ${why}. The video is still in Flow, download it by hand.`, 'error');
-    } else {
-      // let the next harvest open it again
-      run.seen = run.seen.filter((k) => k !== tileKey);
-      run.doneEdits = run.doneEdits.filter((e) => e !== editId);
-      item.status = 'queued';
-      await log(`Download try ${tries} of ${maxTries} for prompt ${idx + 1} failed (${why}). Trying again.`, 'warn');
-    }
-    await saveRun();
-  }
-
-  // Finish downloads that the browser reported as complete (or failed / timed out)
-  async function checkDownloads(cfg) {
-    const all = await store.get('bg_dl', {});
-    for (const [name, d] of Object.entries(run.downloads)) {
-      const s = all[name];
-      const item = run.items[d.idx];
-      const limit = (d.quality === '1080p' ? 25 : 4) * 60000;
-      if (s && s.state === 'complete') {
-        delete run.downloads[name];
-        item.files = (item.files || []).concat(name);
-        run.downloaded += 1;
-        if (item.files.length >= (item.count || 1)) { item.status = 'done'; item.doneAt = Date.now(); }
-        else item.status = 'queued';
-        progress();
-        await log(`Saved Downloads/BulkGen/${name} (${run.downloaded} downloaded).`);
-      } else if ((s && s.state === 'interrupted') || Date.now() - d.startedAt > limit) {
-        delete run.downloads[name];
-        run.dlTries[d.editId] = (run.dlTries[d.editId] || 0) + 1;
-        const why = s && s.state === 'interrupted' ? 'browser reported ' + (s.error || 'an error') : 'the file never arrived';
-        await failDownloadTry(cfg, d.idx, d.editId, d.tileKey, d.title, why);
-      }
-    }
-    await saveRun();
-  }
-
-  // Look at the grid: count generating tiles, catch failed ones and download finished ones.
+  // Look at the grid: count generating tiles, catch failed ones and note finished ones as ready.
   async function harvest(cfg) {
     await goToGrid();
     await sleep(800);
@@ -1371,7 +1299,8 @@
       }
       if (!target) break;
       const rowIdx = target.prompt ? matchItem(target.prompt, '') : -1;
-      if (rowIdx >= 0 && target.rowDownload && cfg.quality !== '1080p' && (run.items[rowIdx].count || 1) === 1) await downloadFromRow(cfg, target, rowIdx);
+      // list view shows the prompt, so a single video can be noted as ready without opening it
+      if (rowIdx >= 0 && (run.items[rowIdx].count || 1) === 1) { run.seen.push(target.key); await markReady(rowIdx, 'row:' + target.key); }
       else await processTile(cfg, target);
       did++;
       await saveRun();
@@ -1380,6 +1309,132 @@
     }
     await saveRun();
     return did;
+  }
+
+  // ---------- download all videos of the project ----------
+  // Nothing downloads during a run. This goes through every finished video in the project grid, saves it
+  // at the chosen quality (1080p goes through Flow's upscale) and skips videos saved earlier.
+  let downloadingAll = false;
+
+  async function collectVideoTiles() {
+    await goToGrid();
+    const sc = gridScroller();
+    if (sc) { sc.scrollTop = 0; await sleep(600); }
+    const found = new Map();
+    for (let i = 0; i < 300 && !stopFlag; i++) {
+      for (const t of gridTiles()) if (t.isVideo && t.src && !t.pending && !t.failed && !found.has(t.key)) found.set(t.key, t.title);
+      if (!sc) break;
+      const before = sc.scrollTop;
+      sc.scrollTop += sc.clientHeight * 0.9;
+      await sleep(600);
+      if (sc.scrollTop === before) break;
+    }
+    return [...found.keys()];
+  }
+
+  async function findTile(key) {
+    const sc = gridScroller();
+    if (sc) { sc.scrollTop = 0; await sleep(500); }
+    for (let i = 0; i < 300 && !stopFlag; i++) {
+      const t = gridTiles().find((x) => x.key === key);
+      if (t) { t.el.scrollIntoView({ block: 'center' }); await sleep(300); return gridTiles().find((x) => x.key === key) || t; }
+      if (!sc) return null;
+      const before = sc.scrollTop;
+      sc.scrollTop += sc.clientHeight * 0.9;
+      await sleep(500);
+      if (sc.scrollTop === before) return null;
+    }
+    return null;
+  }
+
+  // Which prompt of the last run this video belongs to, so it keeps the flow_001 numbering
+  function promptIndexFor(shown) {
+    if (!run || !run.prompts || !run.prompts.length || !shown) return -1;
+    let best = -1;
+    let bestScore = 0;
+    run.prompts.forEach((p, i) => { const sc = textMatch(shown, i); if (sc > bestScore) { best = i; bestScore = sc; } });
+    return bestScore >= 0.85 ? best : -1;
+  }
+
+  async function downloadAll() {
+    downloadingAll = true;
+    stopFlag = false;
+    try {
+      const cfg = await store.get('bg_cfg', {});
+      const quality = cfg.quality || '720p';
+      const project = (location.pathname.match(/\/project\/([0-9a-f-]+)/i) || [])[1] || 'unknown';
+      if (!run) run = { running: false, log: [], items: [], prompts: [], startedAt: Date.now() };
+      run.dl = { running: true, total: 0, saved: 0, failed: 0, skipped: 0 };
+      await log(`Downloading all videos of this project in ${quality}${quality === '1080p' ? ' (Flow upscales each one first, this can take a few minutes per video)' : ''}.`);
+      await setStep('Finding the videos in this project');
+      const savedAll = await store.get('bg_saved', {});
+      const saved = new Set(savedAll[project] || []); // edit ids of videos saved earlier
+      const keys = await collectVideoTiles();
+      run.dl.total = keys.length;
+      await log(`Found ${keys.length} finished video${keys.length === 1 ? '' : 's'} in the project.`);
+      const pending = {}; // file name -> { editId, startedAt, limit }
+      for (const [n, key] of keys.entries()) {
+        if (stopFlag) break;
+        await setStep(`Opening video ${n + 1} of ${keys.length}`);
+        await goToGrid();
+        const t = await findTile(key);
+        if (!t) { run.dl.failed++; await log(`Video ${n + 1}: could not find it in the grid again, skipped.`, 'warn'); continue; }
+        if (!(await openTile(t))) { run.dl.failed++; await log(`Video ${n + 1}: could not open it, skipped.`, 'warn'); continue; }
+        await sleep(1200);
+        const editId = (location.pathname.match(/\/edit\/([0-9a-f-]+)/i) || [])[1] || key;
+        if (saved.has(editId) || Object.values(pending).some((d) => d.editId === editId)) { run.dl.skipped++; continue; }
+        const title = openedTitle() || t.title || 'video';
+        const idx = promptIndexFor(await waitFor(promptOnPage, 4000) || '');
+        const name = idx >= 0
+          ? `${cfg.prefix || 'flow'}_${String(idx + 1).padStart(3, '0')}_${slug(title)}.mp4`
+          : `${cfg.prefix || 'flow'}_${slug(title)}_${editId.slice(0, 6)}.mp4`;
+        await setStep(`Downloading video ${n + 1} of ${keys.length}`);
+        const tries = Math.max(1, parseInt(cfg.downloadRetries, 10) || 3);
+        let how = '';
+        for (let i = 0; i < tries && !how && !stopFlag; i++) { if (i) await sleep(1500); how = await startDownload(name, title, quality); }
+        if (how) {
+          pending[name] = { editId, startedAt: Date.now(), limit: (quality === '1080p' ? 25 : 4) * 60000 };
+          await log(`Video ${n + 1} of ${keys.length}: ${how === 'upscaling' ? 'Flow is upscaling it, the file arrives later' : 'download started'} as ${name}.`);
+        } else {
+          run.dl.failed++;
+          await log(`Video ${n + 1} of ${keys.length}: Flow's Download menu did not start a download. If no file appears at all, allow automatic downloads for flow.google.com (download icon in the address bar).`, 'warn');
+        }
+        await saveRun();
+      }
+      await goToGrid();
+      // wait for the files, upscaled ones can take minutes
+      while (Object.keys(pending).length && !stopFlag) {
+        await setStep(`Waiting for ${Object.keys(pending).length} file${Object.keys(pending).length === 1 ? '' : 's'} to arrive`);
+        const all = await store.get('bg_dl', {});
+        for (const [name, d] of Object.entries(pending)) {
+          const st = all[name];
+          if (st && st.state === 'complete') {
+            delete pending[name];
+            run.dl.saved++;
+            saved.add(d.editId);
+            savedAll[project] = [...saved];
+            await store.set('bg_saved', savedAll);
+            await log(`Saved Downloads/BulkGen/${name}.`);
+          } else if ((st && st.state === 'interrupted') || Date.now() - d.startedAt > d.limit) {
+            delete pending[name];
+            run.dl.failed++;
+            await log(`${name} did not arrive (${st && st.state === 'interrupted' ? 'browser reported ' + (st.error || 'an error') : 'timed out'}). Click Download all again to retry it.`, 'error');
+          }
+        }
+        await saveRun();
+        if (Object.keys(pending).length) await sleep(2000);
+      }
+      const d = run.dl;
+      await log(`${stopFlag ? 'Download stopped' : 'Download finished'}. ${d.saved} saved, ${d.skipped} saved earlier and skipped, ${d.failed} failed.`);
+      run.step = stopFlag ? 'Stopped' : 'Download finished';
+      detachDebugger();
+    } catch (e) {
+      await log(`Download stopped by an error: ${e.message}. Page: ${pageInfo()}`, 'error');
+    } finally {
+      if (run && run.dl) run.dl.running = false;
+      if (run) await saveRun();
+      downloadingAll = false;
+    }
   }
 
   // ---------- main loop ----------
@@ -1411,7 +1466,6 @@
         const problem = pageProblem();
         if (problem) { await pauseWithProblem('Flow says: ' + short(problem, 200) + '.'); continue; }
 
-        await checkDownloads(cfg);
         const total = run.prompts.length;
         const maxAtOnce = Math.max(1, parseInt(cfg.maxInFlight, 10) || 2);
 
@@ -1465,9 +1519,9 @@
           continue;
         }
 
-        const waiting = inFlight() > 0 || Object.keys(run.downloads).length > 0 || run.items.some((it) => it.status === 'sending');
+        const waiting = inFlight() > 0 || run.items.some((it) => it.status === 'sending');
         if (waiting) {
-          await setStep(`${inFlight()} generating, ${Object.keys(run.downloads).length} downloading. Checking the grid.`);
+          await setStep(`${inFlight()} generating. Checking the grid.`);
           const got = await harvest(cfg);
           // timeout guard: free slots that never finish
           const limit = (parseInt(cfg.timeoutMin, 10) || 15) * 60000;
@@ -1498,7 +1552,7 @@
         run.running = false;
         run.finished = true;
         run.step = 'Finished';
-        await log(`All done. ${run.downloaded} downloaded, ${run.failed} failed or skipped, about ${run.credits || 0} credits used.`);
+        await log(`All done. ${run.ready || 0} videos ready in Flow, ${run.failed} failed or skipped, about ${run.credits || 0} credits used. Click "Download all videos of this project" to save them.`);
         await saveRun();
         detachDebugger();
       }
@@ -1512,6 +1566,7 @@
 
   async function startRun(limit) {
     if (run && run.running && looping) return { ok: false, error: 'A run is already going. Stop it first.' };
+    if (downloadingAll) return { ok: false, error: 'BulkGen is downloading the project videos. Wait until that is finished.' };
     const cfg = await store.get('bg_cfg', {});
     let prompts = (cfg.prompts || []).filter((p) => p && p.trim());
     if (limit) prompts = prompts.slice(0, limit);
@@ -1533,9 +1588,9 @@
     const pm = location.pathname.match(/^\/project\/[0-9a-f-]+/i);
     const count = Math.max(1, parseInt(cfg.count, 10) || 1);
     Object.assign(run, {
-      finished: false, paused: false, prompts, next: 0, downloaded: 0, failed: 0, credits: 0,
+      finished: false, paused: false, prompts, next: 0, failed: 0, credits: 0,
       items: prompts.map(() => ({ status: 'pending', tries: 0, files: [], count })),
-      dlTries: {}, downloads: {}, seen: existing, doneEdits: [], project: pm ? pm[0] : '',
+      ready: 0, seen: existing, doneEdits: [], project: pm ? pm[0] : '',
       lastProgress: Date.now(), stuck: '', generating: 0
     });
     await saveRun();
@@ -1608,6 +1663,12 @@
       case 'bg-debug':
         if (looping) return { ok: false, error: 'A run is going. Copy the debug info when it is finished.' };
         return { ok: true, text: await debugInfo() };
+      case 'bg-download-all':
+        if (looping) return { ok: false, error: 'A run is going. Download the videos when it is finished, or Stop it first.' };
+        if (downloadingAll) return { ok: false, error: 'Already downloading the project videos.' };
+        if (!/^\/project\//.test(location.pathname)) return { ok: false, error: 'Open a Flow project page first.' };
+        downloadAll(); // runs on its own; progress shows in the log
+        return { ok: true };
       case 'bg-read-models':
         if (looping) return { ok: false, error: 'A run is going. Read the models when it is finished.' };
         return readModels();
