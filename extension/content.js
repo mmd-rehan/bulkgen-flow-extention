@@ -1158,29 +1158,59 @@
     return !!opened;
   }
 
-  // Clicks Flow's own Download media menu. Returns 'started', 'upscaling' or '' (nothing happened).
-  async function startDownload(name, title, quality) {
+  // Opens Flow's Download media menu and clicks the wanted quality. Returns { q, why }: q is the
+  // quality clicked ('' when nothing was clicked) and why says what went wrong.
+  // 1080p falls back to 720p when Flow shows it greyed out (accounts without the upscale plan).
+  async function clickDownload(name, title, quality) {
     const btn = document.querySelector('button[aria-label="Download media"]') || findClickable(/^download media$/i);
-    if (!btn) return '';
+    if (!btn) return { q: '', why: 'Flow shows no Download button on this video' };
     const menu = () => { const l = [...document.querySelectorAll('[role=menuitem]')].filter(visible); return l.length ? l : null; };
     // Real clicks here: Chrome holds back repeated downloads that do not come from a user gesture
     await trustedClick(btn);
     let items = await waitFor(menu, 3000);
     if (!items) { realClick(btn); items = await waitFor(menu, 3000); }
-    if (!items) return '';
-    const want = quality === '1080p' ? /1080/ : /720|original/i;
-    const choice = items.find((e) => want.test(accName(e))) || items.find((e) => /720|original/i.test(accName(e)));
-    if (!choice) return '';
-    await sendBg({ type: 'bulkgen-expect-download', filename: name, title, waitMs: quality === '1080p' ? 25 * 60000 : 4 * 60000 });
+    if (!items) return { q: '', why: "Flow's Download menu did not open" };
+    await sleep(600); // let the menu finish its open animation, a click during it misses the item
+    items = menu() || items;
+    const usable = items.filter((e) => !e.disabled && e.getAttribute('aria-disabled') !== 'true' && !/menu-item-disabled/.test(e.className));
+    const find = (re) => usable.find((e) => re.test(accName(e)));
+    let q = quality;
+    let choice = quality === '1080p' ? find(/1080/) : null;
+    if (!choice) { q = '720p'; choice = find(/720|original/i); }
+    if (!choice) { realClick(btn); return { q: '', why: "Flow's Download menu has no 720p item" }; }
+    await sendBg({ type: 'bulkgen-expect-download', filename: name, title, waitMs: (q === '1080p' ? 30 : 10) * 60000 });
     await trustedClick(choice);
-    const end = Date.now() + 25000;
-    while (Date.now() < end && !stopFlag) {
-      const s = await dlState(name);
-      if (s && (s.state === 'in_progress' || s.state === 'complete')) return 'started';
-      if (quality === '1080p' && /upscaling your video/i.test(document.body.innerText)) return 'upscaling';
-      await sleep(500);
+    return { q, why: '' };
+  }
+
+  // Waits until Chrome has saved the file and shows what is going on meanwhile.
+  // Returns 'complete', 'stopped', 'not-started' or what went wrong.
+  async function waitForFile(name, q, label) {
+    const t0 = Date.now();
+    const startLimit = (q === '1080p' ? 10 : 1) * 60000; // Flow upscales first, the file starts after that
+    let startedAt = 0;
+    const took = (t) => { const s = Math.round((Date.now() - t) / 1000); return s < 60 ? s + 's' : Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+    while (!stopFlag) {
+      const st = await dlState(name);
+      const state = st && st.state;
+      if (state === 'complete') return 'complete';
+      if (state === 'interrupted') return 'the browser reported ' + (st.error || 'an error');
+      if (state === 'in_progress') {
+        if (!startedAt) startedAt = Date.now();
+        // ask Chrome directly too, in case a change event was missed
+        const info = await sendBg({ type: 'bulkgen-dl-info', filename: name });
+        if (info.ok && info.state === 'complete') return 'complete';
+        if (info.ok && info.state === 'interrupted') return 'the browser reported ' + (info.error || 'an error');
+        const mb = info.ok && info.got ? ` ${(info.got / 1048576).toFixed(1)}${info.total > 0 ? ' of ' + (info.total / 1048576).toFixed(1) : ''} MB` : '';
+        await setStep(`${label}: downloading${mb} (${took(startedAt)})`);
+        if (Date.now() - startedAt > 10 * 60000) return 'the download did not finish in 10 minutes';
+      } else {
+        await setStep(`${label}: ${q === '1080p' ? 'Flow is upscaling it to 1080p' : 'waiting for the file to start'} (${took(t0)})`);
+        if (Date.now() - t0 > startLimit) return 'not-started';
+      }
+      await sleep(1000);
     }
-    return '';
+    return 'stopped';
   }
 
   async function processTile(cfg, t) {
@@ -1365,65 +1395,65 @@
       const project = (location.pathname.match(/\/project\/([0-9a-f-]+)/i) || [])[1] || 'unknown';
       if (!run) run = { running: false, log: [], items: [], prompts: [], startedAt: Date.now() };
       run.dl = { running: true, total: 0, saved: 0, failed: 0, skipped: 0 };
-      await log(`Downloading all videos of this project in ${quality}${quality === '1080p' ? ' (Flow upscales each one first, this can take a few minutes per video)' : ''}.`);
+      await log(`Downloading all videos of this project in ${quality}${quality === '1080p' ? ' (Flow upscales each one first, this can take a few minutes per video)' : ''}, one video at a time.`);
       await setStep('Finding the videos in this project');
       const savedAll = await store.get('bg_saved', {});
       const saved = new Set(savedAll[project] || []); // edit ids of videos saved earlier
       const keys = await collectVideoTiles();
       run.dl.total = keys.length;
       await log(`Found ${keys.length} finished video${keys.length === 1 ? '' : 's'} in the project.`);
-      const pending = {}; // file name -> { editId, startedAt, limit }
+      let toldNo1080 = false;
+      // one video at a time: the next one starts only after this file is saved or given up
       for (const [n, key] of keys.entries()) {
         if (stopFlag) break;
-        await setStep(`Opening video ${n + 1} of ${keys.length}`);
+        const label = `Video ${n + 1} of ${keys.length}`;
+        await setStep(`${label}: opening it`);
         await goToGrid();
         const t = await findTile(key);
-        if (!t) { run.dl.failed++; await log(`Video ${n + 1}: could not find it in the grid again, skipped.`, 'warn'); continue; }
-        if (!(await openTile(t))) { run.dl.failed++; await log(`Video ${n + 1}: could not open it, skipped.`, 'warn'); continue; }
+        if (!t) { run.dl.failed++; await log(`${label}: could not find it in the grid again, skipped.`, 'warn'); continue; }
+        if (!(await openTile(t))) { run.dl.failed++; await log(`${label}: could not open it, skipped.`, 'warn'); continue; }
         await sleep(1200);
         const editId = (location.pathname.match(/\/edit\/([0-9a-f-]+)/i) || [])[1] || key;
-        if (saved.has(editId) || Object.values(pending).some((d) => d.editId === editId)) { run.dl.skipped++; continue; }
+        if (saved.has(editId)) { run.dl.skipped++; await saveRun(); continue; }
         const title = openedTitle() || t.title || 'video';
         const idx = promptIndexFor(await waitFor(promptOnPage, 4000) || '');
         const name = idx >= 0
           ? `${cfg.prefix || 'flow'}_${String(idx + 1).padStart(3, '0')}_${slug(title)}.mp4`
           : `${cfg.prefix || 'flow'}_${slug(title)}_${editId.slice(0, 6)}.mp4`;
-        await setStep(`Downloading video ${n + 1} of ${keys.length}`);
         const tries = Math.max(1, parseInt(cfg.downloadRetries, 10) || 3);
-        let how = '';
-        for (let i = 0; i < tries && !how && !stopFlag; i++) { if (i) await sleep(1500); how = await startDownload(name, title, quality); }
-        if (how) {
-          pending[name] = { editId, startedAt: Date.now(), limit: (quality === '1080p' ? 25 : 4) * 60000 };
-          await log(`Video ${n + 1} of ${keys.length}: ${how === 'upscaling' ? 'Flow is upscaling it, the file arrives later' : 'download started'} as ${name}.`);
-        } else {
+        let result = '';
+        let q = '';
+        for (let i = 0; i < tries && !stopFlag; i++) {
+          if (i) { await log(`${label}: trying again (${i + 1} of ${tries}).`, 'warn'); await sleep(1500); }
+          await setStep(`${label}: clicking Download`);
+          const c = await clickDownload(name, title, quality);
+          if (!c.q) { result = c.why; continue; }
+          q = c.q;
+          if (q !== quality && !toldNo1080) {
+            toldNo1080 = true;
+            await log('1080p is greyed out in Flow on this account (it asks to upgrade), so the videos are saved in 720p.', 'warn');
+          }
+          if (!i) await log(`${label}: ${q === '1080p' ? 'Flow is upscaling it to 1080p, then it downloads' : 'downloading'} as ${name}.`);
+          result = await waitForFile(name, q, label);
+          // a download that started but is slow is not clicked again, that would only make a second copy
+          if (result === 'complete' || result === 'stopped' || /did not finish/.test(result)) break;
+        }
+        if (result === 'complete') {
+          run.dl.saved++;
+          saved.add(editId);
+          savedAll[project] = [...saved];
+          await store.set('bg_saved', savedAll);
+          await log(`${label}: saved Downloads/BulkGen/${name} (${q}).`);
+        } else if (result !== 'stopped' && !stopFlag) {
           run.dl.failed++;
-          await log(`Video ${n + 1} of ${keys.length}: Flow's Download menu did not start a download. If no file appears at all, allow automatic downloads for flow.google.com (download icon in the address bar).`, 'warn');
+          const why = result === 'not-started'
+            ? 'no file arrived. If Chrome asks whether flow.google.com may download multiple files, choose Allow'
+            : result;
+          await log(`${label}: not saved, ${why}. Click "Download all videos of this project" again later to retry it.`, 'error');
         }
         await saveRun();
       }
       await goToGrid();
-      // wait for the files, upscaled ones can take minutes
-      while (Object.keys(pending).length && !stopFlag) {
-        await setStep(`Waiting for ${Object.keys(pending).length} file${Object.keys(pending).length === 1 ? '' : 's'} to arrive`);
-        const all = await store.get('bg_dl', {});
-        for (const [name, d] of Object.entries(pending)) {
-          const st = all[name];
-          if (st && st.state === 'complete') {
-            delete pending[name];
-            run.dl.saved++;
-            saved.add(d.editId);
-            savedAll[project] = [...saved];
-            await store.set('bg_saved', savedAll);
-            await log(`Saved Downloads/BulkGen/${name}.`);
-          } else if ((st && st.state === 'interrupted') || Date.now() - d.startedAt > d.limit) {
-            delete pending[name];
-            run.dl.failed++;
-            await log(`${name} did not arrive (${st && st.state === 'interrupted' ? 'browser reported ' + (st.error || 'an error') : 'timed out'}). Click Download all again to retry it.`, 'error');
-          }
-        }
-        await saveRun();
-        if (Object.keys(pending).length) await sleep(2000);
-      }
       const d = run.dl;
       await log(`${stopFlag ? 'Download stopped' : 'Download finished'}. ${d.saved} saved, ${d.skipped} saved earlier and skipped, ${d.failed} failed.`);
       run.step = stopFlag ? 'Stopped' : 'Download finished';
@@ -1749,6 +1779,7 @@
         try {
           if (d.type === 'bg-set-cfg') { await store.set('bg_cfg', Object.assign(await store.get('bg_cfg', {}), d.cfg)); res = { ok: true }; }
           else if (d.type === 'bg-set-refs') { await store.set('bg_refs', d.refs || []); res = { ok: true }; }
+          else if (d.type === 'bg-forget-saved') { await store.set('bg_saved', {}); res = { ok: true }; }
           else if (d.type === 'bg-status') res = { ok: true, run: await store.get('bg_run', null), looping, version: chrome.runtime.getManifest().version };
           else if (d.type === 'bg-reload-extension') res = await sendBg({ type: 'bulkgen-reload-extension' });
           else res = await onMessage(d);

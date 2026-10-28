@@ -25,7 +25,7 @@ WHAT IT DOES
 - Keeps up to your "At once" number of videos generating at the same time
 - Nothing downloads until you click "Download all videos of this project"
 - Saves files as Downloads/BulkGen/flow_001_title.mp4, numbered in prompt order even when videos finish out of order
-- Downloads in 720p original or 1080p upscaled, and skips videos saved earlier
+- Downloads one video at a time in 720p original or 1080p upscaled, shows live progress, and skips videos saved earlier. If Flow does not offer 1080p on your plan, it saves 720p instead
 - The side panel shows only on Flow tabs and hides on other tabs
 - Checks Flow's own credit estimate before sending and sends nothing if a video would cost more than your limit
 - Pause, Resume and Stop at any time; if the page reloads, the run picks up where it left off

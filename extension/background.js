@@ -131,8 +131,9 @@ chrome.downloads.onChanged.addListener((d) => {
 async function expectDownload(name, title, waitMs) {
   const o = await chrome.storage.local.get(['bg_expect', 'bg_dl']);
   const now = Date.now();
-  const list = (o.bg_expect || []).filter((x) => x.until > now && x.name !== name);
-  list.push({ name, title, until: now + waitMs });
+  // videos are saved one at a time, so only the current one is expected; a late file from an
+  // earlier video that timed out can not take its name
+  const list = [{ name, title, until: now + waitMs }];
   // keep two days of results so storage does not grow forever
   const dl = {};
   for (const [k, v] of Object.entries(o.bg_dl || {})) if (now - (v.t || 0) < 2 * 86400000) dl[k] = v;
@@ -164,6 +165,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg.type === 'bulkgen-expect-download') {
     expectDownload(msg.filename, msg.title || '', msg.waitMs || 120000).then(() => sendResponse({ ok: true }));
+    return true;
+  }
+
+  // live state of one of our downloads, straight from Chrome: state, bytes received and total
+  if (msg.type === 'bulkgen-dl-info') {
+    chrome.storage.local.get('bg_dlmap').then(async (o) => {
+      const id = Object.keys(o.bg_dlmap || {}).reverse().find((k) => o.bg_dlmap[k] === msg.filename);
+      if (!id) { sendResponse({ ok: false }); return; }
+      const [d] = await chrome.downloads.search({ id: Number(id) });
+      if (!d) { sendResponse({ ok: false }); return; }
+      sendResponse({ ok: true, state: d.state, error: d.error || '', got: d.bytesReceived, total: d.totalBytes });
+    }).catch(() => sendResponse({ ok: false }));
     return true;
   }
 
