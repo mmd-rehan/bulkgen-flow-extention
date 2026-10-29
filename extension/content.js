@@ -1358,30 +1358,41 @@
     await goToGrid();
     const sc = gridScroller();
     if (sc) { sc.scrollTop = 0; await sleep(600); }
-    const found = new Map();
+    // each video: its thumbnail key, its title and which copy of that title it is (titles can repeat)
+    const found = [];
     for (let i = 0; i < 300 && !stopFlag; i++) {
-      for (const t of gridTiles()) if (t.isVideo && t.src && !t.pending && !t.failed && !found.has(t.key)) found.set(t.key, t.title);
+      for (const t of gridTiles()) {
+        if (!t.isVideo || !t.src || t.pending || t.failed || found.some((f) => f.key === t.key)) continue;
+        found.push({ key: t.key, title: t.title, ord: found.filter((f) => f.title === t.title).length });
+      }
       if (!sc) break;
       const before = sc.scrollTop;
-      sc.scrollTop += sc.clientHeight * 0.9;
-      await sleep(600);
+      sc.scrollTop += sc.clientHeight * 0.6;
+      await sleep(800);
       if (sc.scrollTop === before) break;
     }
-    return [...found.keys()];
+    return found;
   }
 
-  async function findTile(key) {
+  // Scrolls the grid from the top until the video shows. The grid only draws the tiles near the
+  // screen, so it moves in small steps. If the thumbnail key is not found, the same title is used
+  // instead (the ord-th video with that title, in grid order).
+  async function findTile(v, byTitle = true) {
     const sc = gridScroller();
-    if (sc) { sc.scrollTop = 0; await sleep(500); }
+    if (sc) { sc.scrollTop = 0; await sleep(700); }
+    const sameTitle = [];
     for (let i = 0; i < 300 && !stopFlag; i++) {
-      const t = gridTiles().find((x) => x.key === key);
-      if (t) { t.el.scrollIntoView({ block: 'center' }); await sleep(300); return gridTiles().find((x) => x.key === key) || t; }
-      if (!sc) return null;
+      for (const t of gridTiles()) {
+        if (t.key === v.key) { t.el.scrollIntoView({ block: 'center' }); await sleep(400); return gridTiles().find((x) => x.key === v.key) || t; }
+        if (t.isVideo && t.src && v.title && t.title === v.title && !sameTitle.includes(t.key)) sameTitle.push(t.key);
+      }
+      if (!sc) break;
       const before = sc.scrollTop;
-      sc.scrollTop += sc.clientHeight * 0.9;
-      await sleep(500);
-      if (sc.scrollTop === before) return null;
+      sc.scrollTop += sc.clientHeight * 0.6;
+      await sleep(700);
+      if (sc.scrollTop === before) break;
     }
+    if (byTitle && sameTitle[v.ord]) return findTile({ key: sameTitle[v.ord] }, false);
     return null;
   }
 
@@ -1411,19 +1422,20 @@
       await setStep('Finding the videos in this project');
       const savedAll = await store.get('bg_saved', {});
       const saved = new Set(savedAll[project] || []); // edit ids of videos saved earlier
-      const keys = await collectVideoTiles();
+      const keys = await collectVideoTiles(); // [{ key, title, ord }]
       run.dl.total = keys.length;
       await log(`Found ${keys.length} finished video${keys.length === 1 ? '' : 's'} in the project.`);
       let toldNo1080 = false;
       const usedNames = new Set();
       // one video at a time: the next one starts only after this file is saved or given up
-      for (const [n, key] of keys.entries()) {
+      for (const [n, v] of keys.entries()) {
+        const key = v.key;
         if (stopFlag) break;
         const label = `Video ${n + 1} of ${keys.length}`;
         await setStep(`${label}: opening it`);
         await goToGrid();
-        const t = await findTile(key);
-        if (!t) { run.dl.failed++; await log(`${label}: could not find it in the grid again, skipped.`, 'warn'); continue; }
+        const t = await findTile(v);
+        if (!t) { run.dl.failed++; await log(`${label} ("${short(v.title, 40)}"): could not find it in the grid again, skipped. Click Download all again to retry it.`, 'warn'); continue; }
         if (!(await openTile(t))) { run.dl.failed++; await log(`${label}: could not open it, skipped.`, 'warn'); continue; }
         await sleep(1200);
         const editId = (location.pathname.match(/\/edit\/([0-9a-f-]+)/i) || [])[1] || key;
