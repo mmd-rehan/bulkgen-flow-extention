@@ -99,11 +99,16 @@ function pickExpectation(list, item) {
 chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
   // our own direct downloads already carry the right name
   if (item.byExtensionId === chrome.runtime.id || !looksLikeFlow(item)) { suggest(); return; }
-  chrome.storage.local.get(['bg_expect', 'bg_dlmap', 'bg_dl']).then((o) => {
+  chrome.storage.local.get(['bg_expect', 'bg_dlmap', 'bg_dl', 'bg_dl_active']).then((o) => {
     const now = Date.now();
     const list = (o.bg_expect || []).filter((x) => x.until > now);
     const i = pickExpectation(list, item);
-    if (i < 0) { suggest(); return; }
+    if (i < 0) {
+      // while "Download all" runs, every Flow video still goes into the BulkGen folder, under Flow's own name
+      if ((o.bg_dl_active || 0) > now) suggest({ filename: 'BulkGen/' + (item.filename || 'video.mp4').split(/[\\/]/).pop(), conflictAction: 'uniquify' });
+      else suggest();
+      return;
+    }
     const exp = list.splice(i, 1)[0];
     const map = o.bg_dlmap || {};
     for (const id of Object.keys(map).slice(0, -200)) delete map[id]; // keep the last 200
@@ -161,6 +166,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
     sendResponse({ ok: true });
     return;
+  }
+
+  // a video that was given up on: a later download (for example a manual one) must not take its name
+  if (msg.type === 'bulkgen-expect-clear') {
+    chrome.storage.local.set({ bg_expect: [] }).then(() => sendResponse({ ok: true }));
+    return true;
   }
 
   if (msg.type === 'bulkgen-expect-download') {

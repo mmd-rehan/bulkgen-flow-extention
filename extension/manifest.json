@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "BulkGen for Flow",
   "short_name": "BulkGen",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "Queue many video prompts at once in Flow and download every finished video of a project with one click.",
   "homepage_url": "https://github.com/mmd-rehan/bulkgen-flow-extention",
   "icons": {

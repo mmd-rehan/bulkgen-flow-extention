@@ -1426,6 +1426,7 @@
         for (let i = 0; i < tries && !stopFlag; i++) {
           if (i) { await log(`${label}: trying again (${i + 1} of ${tries}).`, 'warn'); await sleep(1500); }
           await setStep(`${label}: clicking Download`);
+          await store.set('bg_dl_active', Date.now() + 45 * 60000); // runs out by itself if the tab is closed
           const c = await clickDownload(name, title, quality);
           if (!c.q) { result = c.why; continue; }
           q = c.q;
@@ -1438,6 +1439,7 @@
           // a download that started but is slow is not clicked again, that would only make a second copy
           if (result === 'complete' || result === 'stopped' || /did not finish/.test(result)) break;
         }
+        if (result !== 'complete') await sendBg({ type: 'bulkgen-expect-clear' });
         if (result === 'complete') {
           run.dl.saved++;
           saved.add(editId);
@@ -1461,6 +1463,8 @@
     } catch (e) {
       await log(`Download stopped by an error: ${e.message}. Page: ${pageInfo()}`, 'error');
     } finally {
+      await store.set('bg_dl_active', 0);
+      await sendBg({ type: 'bulkgen-expect-clear' });
       if (run && run.dl) run.dl.running = false;
       if (run) await saveRun();
       downloadingAll = false;
