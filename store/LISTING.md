@@ -23,7 +23,7 @@ WHAT IT DOES
 - Reads the video models Flow offers and sets the one you pick; seconds, resolution and aspect follow that model
 - Optional reference images (Ingredients) for models that accept them, matched in order: image 1 goes with prompt 1, image 2 with prompt 2. Any number of images; prompts past the last image go without one
 - Keeps up to your "At once" number of videos generating at the same time
-- Nothing downloads until you click "Download all videos of this project"
+- Nothing downloads until you click "Download all videos of this project". Pick From and To dates to save only the videos created on those days
 - Saves files as Downloads/BulkGen/flow_001_title.mp4, numbered in prompt order even when videos finish out of order
 - Downloads one video at a time in 720p original or 1080p upscaled, shows live progress, and skips videos saved earlier. If Flow does not offer 1080p on your plan, it saves 720p instead
 - The side panel shows only on Flow tabs and hides on other tabs

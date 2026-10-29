@@ -30,7 +30,7 @@ Paste your prompts once, pick the model and settings, and press Start. BulkGen s
 - Reads the video models Flow offers; seconds, resolution and aspect follow the model
 - Optional reference images (Ingredients), matched in order: image 1 goes with prompt 1, image 2 with prompt 2, and so on
 - Checks Flow's credit estimate before sending and sends nothing above your per-video limit
-- One click downloads every video of the project, one at a time with live progress, in 720p original or 1080p upscaled (720p when Flow does not offer 1080p on your plan), with retries, and skips videos saved earlier
+- One click downloads every video of the project, one at a time with live progress, in 720p original or 1080p upscaled (720p when Flow does not offer 1080p on your plan), with retries, and skips videos saved earlier. Optional From and To dates save only the videos created on those days
 - The side panel shows only on Flow tabs
 - Pause, Resume and Stop; a page reload resumes the run
 - Step by step error messages and a "Copy debug info" button for bug reports

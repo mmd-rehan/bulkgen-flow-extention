@@ -1363,7 +1363,7 @@
     for (let i = 0; i < 300 && !stopFlag; i++) {
       for (const t of gridTiles()) {
         if (!t.isVideo || !t.src || t.pending || t.failed || found.some((f) => f.key === t.key)) continue;
-        found.push({ key: t.key, title: t.title, ord: found.filter((f) => f.title === t.title).length });
+        found.push({ key: t.key, title: t.title, ord: found.filter((f) => f.title === t.title).length, day: createdDay(t.tile) });
       }
       if (!sc) break;
       const before = sc.scrollTop;
@@ -1372,6 +1372,40 @@
       if (sc.scrollTop === before) break;
     }
     return found;
+  }
+
+  // Flow's view mode (Settings > View mode: Grid or Batch). Only Batch shows when each video was made.
+  // Returns true when it had to change it.
+  async function setViewMode(name) {
+    const btn = document.querySelector('button[aria-label="Settings"]');
+    if (!btn) return false;
+    btn.click();
+    const re = new RegExp(name + '$', 'i');
+    const opt = await waitFor(() => [...document.querySelectorAll('.cdk-overlay-pane button[role=radio]')].find((b) => visible(b) && re.test(norm(b.innerText))), 3000);
+    let changed = false;
+    if (opt && opt.getAttribute('aria-checked') !== 'true') { opt.click(); changed = true; await sleep(1500); }
+    escape();
+    await sleep(400);
+    return changed;
+  }
+
+  // The day a video was made, as YYYY-MM-DD, from "Created on 24 Oct 2026" in the Batch view ('' if unknown)
+  function createdDay(tile) {
+    const row = tile.closest('.batch-container');
+    const m = row && row.querySelector('.metadata-row');
+    if (!m) return '';
+    const text = norm(m.innerText);
+    const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    if (/\btoday\b/i.test(text)) return ymd(new Date());
+    if (/\byesterday\b/i.test(text)) return ymd(new Date(Date.now() - 86400000));
+    const words = text.split(' ');
+    for (let i = 0; i < words.length; i++) {
+      if (!/\d/.test(words[i]) && !/^[a-z]{3,}\.?,?$/i.test(words[i])) continue;
+      const d = new Date(words.slice(i).join(' '));
+      // the day and year must be in the text, so a date in another language is never guessed wrong
+      if (!isNaN(d) && d.getFullYear() > 2020 && new RegExp(`\\b0?${d.getDate()}\\b`).test(text) && text.includes(String(d.getFullYear()))) return ymd(d);
+    }
+    return '';
   }
 
   // Scrolls the grid from the top until the video shows. The grid only draws the tiles near the
@@ -1412,6 +1446,7 @@
   async function downloadAll() {
     downloadingAll = true;
     stopFlag = false;
+    let backToGrid = false; // Flow's view mode was switched to Batch for the dates and goes back after
     try {
       const cfg = await store.get('bg_cfg', {});
       const quality = cfg.quality || '720p';
@@ -1422,9 +1457,24 @@
       await setStep('Finding the videos in this project');
       const savedAll = await store.get('bg_saved', {});
       const saved = new Set(savedAll[project] || []); // edit ids of videos saved earlier
-      const keys = await collectVideoTiles(); // [{ key, title, ord }]
-      run.dl.total = keys.length;
+      const from = cfg.dlFrom || '';
+      const to = cfg.dlTo || '';
+      if (from || to) {
+        await goToGrid();
+        backToGrid = await setViewMode('Batch');
+        if (backToGrid) await log("Switched Flow's view mode to Batch to read the dates, it goes back to Grid at the end.");
+        if (!(await waitFor(() => document.querySelector('.batch-container .metadata-row'), 8000))) {
+          throw stepError('Read the video dates', "Flow's Batch view shows no dates. Clear the two dates in the panel to download every video");
+        }
+      }
+      let keys = await collectVideoTiles(); // [{ key, title, ord, day }]
       await log(`Found ${keys.length} finished video${keys.length === 1 ? '' : 's'} in the project.`);
+      if (from || to) {
+        const unknown = keys.filter((v) => !v.day).length;
+        keys = keys.filter((v) => v.day && (!from || v.day >= from) && (!to || v.day <= to));
+        await log(`${keys.length} of them were created ${from && to ? (from === to ? 'on ' + from : from + ' to ' + to) : from ? 'on or after ' + from : 'on or before ' + to}.${unknown ? ` ${unknown} had no readable date and are left out.` : ''}`, unknown ? 'warn' : 'info');
+      }
+      run.dl.total = keys.length;
       let toldNo1080 = false;
       const usedNames = new Set();
       // one video at a time: the next one starts only after this file is saved or given up
@@ -1491,6 +1541,7 @@
       await log(`Download stopped by an error: ${e.message}. Page: ${pageInfo()}`, 'error');
     } finally {
       await store.set('bg_dl_active', 0);
+      if (backToGrid) { try { await goToGrid(); await setViewMode('Grid'); } catch (e) { /* the view mode is only cosmetic */ } }
       await sendBg({ type: 'bulkgen-expect-clear' });
       if (run && run.dl) run.dl.running = false;
       if (run) await saveRun();

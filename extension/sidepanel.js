@@ -1,6 +1,6 @@
 const $ = (id) => document.getElementById(id);
-const FIELDS = ['prompts', 'character', 'style', 'duration', 'aspect', 'count', 'model', 'maxInFlight', 'maxCredits', 'prefix', 'retries', 'downloadRetries', 'quality', 'confirmNever', 'timeoutMin', 'engine', 'resolution', 'useRefs', 'refsRights'];
-const VALUE_FIELDS = ['character', 'style', 'aspect', 'count', 'maxInFlight', 'maxCredits', 'prefix', 'retries', 'downloadRetries', 'quality', 'timeoutMin', 'engine'];
+const FIELDS = ['prompts', 'character', 'style', 'duration', 'aspect', 'count', 'model', 'maxInFlight', 'maxCredits', 'prefix', 'retries', 'downloadRetries', 'quality', 'confirmNever', 'timeoutMin', 'engine', 'resolution', 'useRefs', 'refsRights', 'dlFrom', 'dlTo'];
+const VALUE_FIELDS = ['character', 'style', 'aspect', 'count', 'maxInFlight', 'maxCredits', 'prefix', 'retries', 'downloadRetries', 'quality', 'timeoutMin', 'engine', 'dlFrom', 'dlTo'];
 let models = []; // what Flow offers, read by the content script
 let savedCfg = {};
 
@@ -31,9 +31,20 @@ function readForm() {
     quality: $('quality').value,
     downloadRetries: Math.max(1, parseInt($('downloadRetries').value, 10) || 3),
     timeoutMin: Math.max(3, parseInt($('timeoutMin').value, 10) || 15),
-    confirmNever: $('confirmNever').checked
+    confirmNever: $('confirmNever').checked,
+    dlFrom: $('dlFrom').value,
+    dlTo: $('dlTo').value
   };
   return cfg;
+}
+
+// the download button says which videos it will save
+function dlLabel() {
+  const from = $('dlFrom').value;
+  const to = $('dlTo').value;
+  $('downloadAll').textContent = !from && !to ? 'Download all videos of this project'
+    : from && to ? (from === to ? `Download videos created on ${from}` : `Download videos created ${from} to ${to}`)
+    : from ? `Download videos created on or after ${from}` : `Download videos created on or before ${to}`;
 }
 
 async function saveForm() {
@@ -41,6 +52,7 @@ async function saveForm() {
   savedCfg = cfg;
   await chrome.storage.local.set({ bg_cfg: cfg });
   $('promptCount').textContent = cfg.prompts.length + ' prompt' + (cfg.prompts.length === 1 ? '' : 's');
+  dlLabel();
   return cfg;
 }
 
@@ -54,6 +66,7 @@ async function loadForm() {
     $('confirmNever').checked = !!bg_cfg.confirmNever;
     $('useRefs').checked = !!bg_cfg.useRefs;
     $('refsRights').checked = !!bg_cfg.refsRights;
+    dlLabel();
   }
   renderModels();
 }

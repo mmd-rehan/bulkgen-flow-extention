@@ -10,7 +10,7 @@ BulkGen is built and maintained by Muhammad Rehan, a full-stack developer in Dub
 - Reads the video models Flow offers and sets the one you pick; seconds, resolution and aspect follow that model.
 - Optional reference images (Flow "Ingredients"), matched in order: image 1 goes with prompt 1, image 2 with prompt 2, and so on.
 - Checks Flow's credit estimate before sending and sends nothing above your per-video limit.
-- Nothing downloads until you click "Download all videos of this project"; then it saves the videos one at a time with live progress, in 720p or 1080p upscaled (720p when the Flow plan has no 1080p).
+- Nothing downloads until you click "Download all videos of this project"; then it saves the videos one at a time with live progress, in 720p or 1080p upscaled (720p when the Flow plan has no 1080p). Optional From and To dates limit it to videos created on those days.
 - Pause, resume, stop, download retries, and resume after a page reload.
 - No servers, no analytics, no data collection. It never asks for a password.
 - Independent project, not made or endorsed by Google.
