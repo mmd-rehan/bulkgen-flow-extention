@@ -47,8 +47,9 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # "Run workflow" in the Actions tab builds the zip again and retries the Web Store upload
       - name: Build zip
-        if: steps.check.outputs.exists == 'false'
+        if: steps.check.outputs.exists == 'false' || github.event_name == 'workflow_dispatch'
         run: sh build.sh
 
       - name: Create release
@@ -65,15 +66,17 @@ jobs:
             --generate-notes
 
       - name: Upload to the Chrome Web Store and submit for review
-        if: steps.check.outputs.exists == 'false' && env.CWS_REFRESH_TOKEN != '' && env.CWS_EXTENSION_ID != ''
+        if: (steps.check.outputs.exists == 'false' || github.event_name == 'workflow_dispatch') && env.CWS_REFRESH_TOKEN != '' && env.CWS_EXTENSION_ID != ''
         run: |
           v="${{ steps.v.outputs.version }}"
           api="https://chromewebstore.googleapis.com"
           item="publishers/$CWS_PUBLISHER_ID/items/$CWS_EXTENSION_ID"
-          token=$(curl -sS https://oauth2.googleapis.com/token \
+          auth=$(curl -sS https://oauth2.googleapis.com/token \
             -d client_id="$CWS_CLIENT_ID" -d client_secret="$CWS_CLIENT_SECRET" \
-            -d refresh_token="$CWS_REFRESH_TOKEN" -d grant_type=refresh_token | jq -r '.access_token // empty')
-          [ -n "$token" ] || { echo "Could not get a Web Store access token, check the CWS_ secrets."; exit 1; }
+            -d refresh_token="$CWS_REFRESH_TOKEN" -d grant_type=refresh_token)
+          token=$(echo "$auth" | jq -r '.access_token // empty')
+          # on failure print only Google's error code and message, never the response with tokens
+          [ -n "$token" ] || { echo "Could not get a Web Store access token: $(echo "$auth" | jq -r '"\(.error) \(.error_description // "")"')"; exit 1; }
 
           echo "Uploading dist/bulkgen-flow-$v.zip"
           res=$(curl -sS -X POST -H "Authorization: Bearer $token" -T "dist/bulkgen-flow-$v.zip" "$api/upload/v2/$item:upload")
