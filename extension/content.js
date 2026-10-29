@@ -742,7 +742,8 @@
     const add = document.querySelector('button[aria-label="Add ingredients to the prompt box"]');
     if (!add) return false;
     add.click(); // plain click: this picker opens on pointerdown and would close again on the click
-    const findItem = () => [...document.querySelectorAll('button.asset-item')].find((b) => visible(b) && norm(b.innerText).startsWith(name));
+    const base = name.replace(/\.[a-z0-9]+$/i, '');
+    const findItem = () => [...document.querySelectorAll('button.asset-item')].find((b) => visible(b) && norm(b.innerText).startsWith(base));
     if (!(await waitFor(() => document.querySelector('button.asset-item'), 4000))) return false;
     let item = await waitFor(findItem, 1500);
     if (!item) {
@@ -797,8 +798,8 @@
         run.uploaded[r.name] = true;
         continue;
       }
-      // never upload the same image twice in a run, that only fills the library with copies
-      if (run.uploaded[r.name]) return `${what}: uploaded earlier in this run but not found in the Flow library under the name ${r.name}`;
+      // uploaded before but not found in the library: upload it again (one extra copy beats a skipped prompt)
+      if (run.uploaded[r.name]) await log(`Reference image ${what} was uploaded earlier but is not in the Flow library list, uploading it again.`, 'warn');
       const err = await uploadRef(r, cfg);
       if (err === 'rights') return err;
       if (err) return `${what}: ${err}`;
@@ -897,6 +898,12 @@
     if (!ok) {
       const problem = pageProblem() || toastText();
       if (problem && CREDIT_RE.test(problem)) return { ok: false, fatal: true, reason: 'Flow says: ' + short(problem, 200) };
+      // Flow emptied the box without an error: it took the prompt and the tile is just slow.
+      // Sending again here would pay twice for the same video.
+      if (!problem && !boxText()) {
+        await log(`${label}: Flow took the prompt but its tile is slow to show, counting it as sent (not sending it again).`, 'warn');
+        return { ok: true, cost: run.costPer || 0, note: 'its tile was slow to show' };
+      }
       return { ok: false, reason: problem ? 'Flow says: ' + short(problem, 160) : 'no generating tile appeared after clicking Start' };
     }
     await log(`Sent ${label} in ${((Date.now() - t0) / 1000).toFixed(1)}s: "${short(p, 70)}"`);
@@ -1247,6 +1254,7 @@
       await log(`Prompt ${idx + 1} arrived late after being marked ${item.status}, counting it as ready.`, 'warn');
     }
     run.doneEdits.push(editId);
+    item.edits = (item.edits || []).concat(editId);
     item.ready = (item.ready || 0) + 1;
     if (item.ready >= (item.count || 1)) { item.status = 'done'; item.doneAt = Date.now(); }
     run.ready = (run.ready || 0) + 1;
@@ -1377,13 +1385,17 @@
     return null;
   }
 
-  // Which prompt of the last run this video belongs to, so it keeps the flow_001 numbering
-  function promptIndexFor(shown) {
-    if (!run || !run.prompts || !run.prompts.length || !shown) return -1;
-    let best = -1;
-    let bestScore = 0;
-    run.prompts.forEach((p, i) => { const sc = textMatch(shown, i); if (sc > bestScore) { best = i; bestScore = sc; } });
-    return bestScore >= 0.85 ? best : -1;
+  // Which prompt of the last run this video belongs to, so it keeps the flow_001 numbering.
+  // First by the video the run saw finish for that prompt, then by the prompt text (only a clear winner).
+  function promptIndexFor(editId, key, shown) {
+    if (!run || !run.prompts || !run.prompts.length) return -1;
+    const known = (run.items || []).findIndex((it) => (it.edits || []).some((e) => e === editId || e === 'row:' + key));
+    if (known >= 0) return known;
+    if (!shown) return -1;
+    const scores = run.prompts.map((p, i) => textMatch(shown, i));
+    const best = scores.indexOf(Math.max(...scores));
+    const second = Math.max(...scores.filter((s, i) => i !== best), 0);
+    return scores[best] >= 0.85 && scores[best] - second > 0.05 ? best : -1;
   }
 
   async function downloadAll() {
@@ -1403,6 +1415,7 @@
       run.dl.total = keys.length;
       await log(`Found ${keys.length} finished video${keys.length === 1 ? '' : 's'} in the project.`);
       let toldNo1080 = false;
+      const usedNames = new Set();
       // one video at a time: the next one starts only after this file is saved or given up
       for (const [n, key] of keys.entries()) {
         if (stopFlag) break;
@@ -1416,10 +1429,12 @@
         const editId = (location.pathname.match(/\/edit\/([0-9a-f-]+)/i) || [])[1] || key;
         if (saved.has(editId)) { run.dl.skipped++; await saveRun(); continue; }
         const title = openedTitle() || t.title || 'video';
-        const idx = promptIndexFor(await waitFor(promptOnPage, 4000) || '');
-        const name = idx >= 0
+        const idx = promptIndexFor(editId, key, await waitFor(promptOnPage, 4000) || '');
+        let name = idx >= 0
           ? `${cfg.prefix || 'flow'}_${String(idx + 1).padStart(3, '0')}_${slug(title)}.mp4`
           : `${cfg.prefix || 'flow'}_${slug(title)}_${editId.slice(0, 6)}.mp4`;
+        if (usedNames.has(name)) name = name.replace(/\.mp4$/, `_${editId.slice(0, 6)}.mp4`); // two videos of one prompt
+        usedNames.add(name);
         const tries = Math.max(1, parseInt(cfg.downloadRetries, 10) || 3);
         let result = '';
         let q = '';
