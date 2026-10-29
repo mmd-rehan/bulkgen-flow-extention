@@ -2,6 +2,7 @@
 # then uploads the same zip to the Chrome Web Store and submits it for review.
 # To release: bump "version" in extension/manifest.json, commit, push.
 # The Web Store step runs only when these are set in the repo settings (Secrets and variables > Actions):
+# the secrets live in the "production" environment, the variables in the repository
 #   secrets CWS_CLIENT_ID, CWS_CLIENT_SECRET, CWS_REFRESH_TOKEN; variables CWS_PUBLISHER_ID, CWS_EXTENSION_ID
 name: Release
 
@@ -20,6 +21,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    environment: production # holds the CWS_ secrets
     env:
       CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
       CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
