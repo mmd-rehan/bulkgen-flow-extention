@@ -1,5 +1,8 @@
-# Publishes a GitHub Release with the store zip whenever main has a version that is not released yet.
+# Publishes a GitHub Release with the store zip whenever main has a version that is not released yet,
+# then uploads the same zip to the Chrome Web Store and submits it for review.
 # To release: bump "version" in extension/manifest.json, commit, push.
+# The Web Store step runs only when these are set in the repo settings (Secrets and variables > Actions):
+#   secrets CWS_CLIENT_ID, CWS_CLIENT_SECRET, CWS_REFRESH_TOKEN; variables CWS_PUBLISHER_ID, CWS_EXTENSION_ID
 name: Release
 
 on:
@@ -17,6 +20,12 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+      CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+      CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+      CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
+      CWS_EXTENSION_ID: ${{ vars.CWS_EXTENSION_ID }}
     steps:
       - uses: actions/checkout@v5
 
@@ -52,3 +61,32 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "BulkGen for Flow v$v" \
             --generate-notes
+
+      - name: Upload to the Chrome Web Store and submit for review
+        if: steps.check.outputs.exists == 'false' && env.CWS_REFRESH_TOKEN != '' && env.CWS_EXTENSION_ID != ''
+        run: |
+          v="${{ steps.v.outputs.version }}"
+          api="https://chromewebstore.googleapis.com"
+          item="publishers/$CWS_PUBLISHER_ID/items/$CWS_EXTENSION_ID"
+          token=$(curl -sS https://oauth2.googleapis.com/token \
+            -d client_id="$CWS_CLIENT_ID" -d client_secret="$CWS_CLIENT_SECRET" \
+            -d refresh_token="$CWS_REFRESH_TOKEN" -d grant_type=refresh_token | jq -r '.access_token // empty')
+          [ -n "$token" ] || { echo "Could not get a Web Store access token, check the CWS_ secrets."; exit 1; }
+
+          echo "Uploading dist/bulkgen-flow-$v.zip"
+          res=$(curl -sS -X POST -H "Authorization: Bearer $token" -T "dist/bulkgen-flow-$v.zip" "$api/upload/v2/$item:upload")
+          echo "$res"
+          state=$(echo "$res" | jq -r '.uploadState // empty')
+          # big packages are processed in the background: ask again for up to 5 minutes
+          for i in $(seq 1 30); do
+            case "$state" in IN_PROGRESS|UPLOAD_IN_PROGRESS) ;; *) break ;; esac
+            sleep 10
+            res=$(curl -sS -H "Authorization: Bearer $token" "$api/v2/$item:fetchStatus")
+            state=$(echo "$res" | jq -r '.lastAsyncUploadState // empty')
+          done
+          [ "$state" = "SUCCEEDED" ] || { echo "Upload did not succeed (state: ${state:-none}): $res"; exit 1; }
+
+          res=$(curl -sS -X POST -H "Authorization: Bearer $token" "$api/v2/$item:publish")
+          echo "$res"
+          echo "$res" | jq -e '.error' > /dev/null && { echo "Publish request failed."; exit 1; }
+          echo "v$v is uploaded and submitted for review. It goes live after Google approves it."
