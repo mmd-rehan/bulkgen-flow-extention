@@ -58,7 +58,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           v="${{ steps.v.outputs.version }}"
-          # bulkgen.zip keeps the same name in every release, so the website can link to releases/latest/download/bulkgen.zip
+          # bulkgen.zip keeps the same name in every release, so releases/latest/download/bulkgen.zip always points to the newest zip
           cp "dist/bulkgen-flow-$v.zip" dist/bulkgen.zip
           gh release create "v$v" "dist/bulkgen-flow-$v.zip" dist/bulkgen.zip \
             --target "$GITHUB_SHA" \

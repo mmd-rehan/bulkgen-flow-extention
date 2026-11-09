@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mmd-rehan/bulkgen-flow-extention/releases/latest/download/bulkgen.zip"><b>Download the latest release</b></a>
+  <a href="https://chromewebstore.google.com/detail/bulkgen-for-flow/hkdniekeijbannoenmdoocmnbepflnng"><b>Add to Chrome from the Chrome Web Store</b></a>
   ·
   <a href="https://bulkgen.mmd-rehan.com">Website</a>
   ·
@@ -42,10 +42,11 @@ Paste your prompts once, pick the model and settings, and press Start. BulkGen s
 
 ## Install
 
-1. Download [bulkgen.zip](https://github.com/mmd-rehan/bulkgen-flow-extention/releases/latest/download/bulkgen.zip) and unzip it to a folder you will keep.
-2. Open chrome://extensions and turn on Developer mode.
-3. Click "Load unpacked" and choose the folder.
-4. Open your Flow project, click the BulkGen icon, paste your prompts and press Start.
+1. Open [BulkGen for Flow in the Chrome Web Store](https://chromewebstore.google.com/detail/bulkgen-for-flow/hkdniekeijbannoenmdoocmnbepflnng) and click "Add to Chrome".
+2. Pin the BulkGen icon from the puzzle piece menu in the Chrome toolbar.
+3. Open your Flow project, click the BulkGen icon, paste your prompts and press Start.
+
+Updates install automatically through the Chrome Web Store.
 
 ## Folders
 

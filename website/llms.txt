@@ -18,7 +18,7 @@ BulkGen is built and maintained by Muhammad Rehan, a full-stack developer in Dub
 ## Links
 
 - [Website](https://bulkgen.mmd-rehan.com/)
-- [Download the latest release (zip)](https://github.com/mmd-rehan/bulkgen-flow-extention/releases/latest/download/bulkgen.zip)
+- [Add BulkGen for Flow to Chrome (Chrome Web Store)](https://chromewebstore.google.com/detail/bulkgen-for-flow/hkdniekeijbannoenmdoocmnbepflnng)
 - [Source code on GitHub](https://github.com/mmd-rehan/bulkgen-flow-extention)
 - [Privacy policy](https://bulkgen.mmd-rehan.com/privacy)
 - [Muhammad Rehan, the maker](https://www.mmd-rehan.com/)
