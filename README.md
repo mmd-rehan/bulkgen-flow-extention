@@ -59,8 +59,8 @@ Paste your prompts once, pick the model and settings, and press Start. BulkGen s
 ## Release
 
 1. Bump `version` in `extension/manifest.json`, commit and push to `main`.
-2. GitHub Actions builds the zip and publishes it as a GitHub Release named `v<version>` (see the Releases page). Pushes that keep the same version do not create a release.
-3. Download the zip from the release (or run `./build.sh` locally) and upload it in the Chrome Web Store developer dashboard.
+2. GitHub Actions builds the zip, publishes it as a GitHub Release named `v<version>` (see the Releases page), uploads the same zip to the Chrome Web Store and submits it for review. It goes live once Google approves it. Pushes that keep the same version do nothing.
+3. If the store step fails, fix the cause and click "Run workflow" on the Release workflow in the Actions tab to retry it. The store keys are the `CWS_CLIENT_ID`, `CWS_CLIENT_SECRET` and `CWS_REFRESH_TOKEN` secrets in the `production` environment.
 
 ## Author
 
